@@ -1,19 +1,24 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { prisma, isDbConnected } from './db.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'clariq-super-secret-key-2026';
 
 // Middlewares
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// In-Memory Database Store
+// In-Memory Database Store (Fallback jika DB belum diconnect)
 let userProfile = {
+  id: 1,
   name: 'Putri Anindya',
   email: 'putri.anindya@gmail.com',
   emailReminders: true,
@@ -23,14 +28,30 @@ let userProfile = {
   limitCount: 5,
 };
 
+let inMemoryUsers = [
+  {
+    id: 1,
+    name: 'Putri Anindya',
+    email: 'putri.anindya@gmail.com',
+    passwordHash: bcrypt.hashSync('password123', 10),
+    plan: 'Free',
+    emailReminders: true,
+    workspaceName: 'Personal workspace',
+  },
+];
+
 let contracts = [
   {
     id: 1,
     name: 'Employment Agreement',
+    nameId: 'Perjanjian Kerja Karyawan',
     company: 'PT Example Indonesia',
     type: 'Employment',
+    typeId: 'Ketenagakerjaan',
     status: 'Needs Attention',
+    statusId: 'Perlu Perhatian',
     date: 'Nov 12, 2027',
+    dateId: '12 Nov 2027',
     color: 'blue',
     summary:
       'Perjanjian kerja waktu tertentu (PKWT) untuk posisi Product Designer. Menetapkan jam kerja 40 jam/minggu, remunerasi bulanan, serta ketentuan kerahasiaan. Terdapat poin perhatian penting pada klausul ganti rugi pemutusan hubungan kerja sebelum masa kontrak berakhir dan klausul perpanjangan otomatis.',
@@ -110,10 +131,14 @@ let contracts = [
   {
     id: 2,
     name: 'Freelance Agreement',
+    nameId: 'Kontrak Kerja Lepas (Freelance)',
     company: 'Studio XYZ',
     type: 'Freelance',
+    typeId: 'Pekerja Lepas',
     status: 'Review',
+    statusId: 'Perlu Tinjauan',
     date: 'Nov 10, 2027',
+    dateId: '10 Nov 2027',
     color: 'lavender',
     summary:
       'Kontrak proyek pembuatan identitas merek dan materi visual. Terdapat ketentuan batas revisi maksimal 2 kali dan pembayaran bertahap (milestone) dengan tempo Net 30 hari.',
@@ -153,10 +178,14 @@ let contracts = [
   {
     id: 3,
     name: 'Vendor Agreement',
+    nameId: 'Perjanjian Layanan Vendor',
     company: 'Kopi Kita',
     type: 'Business',
+    typeId: 'Bisnis / Vendor',
     status: 'Safe',
+    statusId: 'Aman',
     date: 'Nov 8, 2027',
+    dateId: '8 Nov 2027',
     color: 'mint',
     summary:
       'Perjanjian pengadaan suplai bahan baku kopi dan perlengkapan barista. Ketentuan garansi kualitas dan penggantian barang cacat dalam 48 jam tertera sangat transparan.',
@@ -186,10 +215,14 @@ let contracts = [
   {
     id: 4,
     name: 'Apartment Lease',
+    nameId: 'Perjanjian Sewa Apartemen',
     company: 'Bumi Residence',
     type: 'Rental',
+    typeId: 'Sewa Menyewa',
     status: 'Safe',
+    statusId: 'Aman',
     date: 'Nov 5, 2027',
+    dateId: '5 Nov 2027',
     color: 'peach',
     summary:
       'Sewa unit apartemen 2 kamar tidur untuk periode 12 bulan. Termasuk ketentuan deposit keamanan yang dapat dikembalikan penuh jika tidak ada kerusakan struktural.',
@@ -336,14 +369,201 @@ const contractComparisonData = {
 };
 
 // ==========================================
-// ROUTES
+// AUTH UTILITIES & MIDDLEWARE
 // ==========================================
 
-// Health & System Info
+const getUserFromReq = async (req) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (isDbConnected() && prisma) {
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        select: { id: true, name: true, email: true, plan: true, emailReminders: true, workspaceName: true },
+      });
+      return user;
+    } else {
+      const user = inMemoryUsers.find((u) => u.id === decoded.id);
+      return user || null;
+    }
+  } catch {
+    return null;
+  }
+};
+
+// ==========================================
+// ROUTES: AUTH (LOGIN & REGISTER)
+// ==========================================
+
+// Register
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Nama lengkap, email, dan kata sandi wajib diisi.',
+    });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  if (password.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: 'Kata sandi minimal harus 6 karakter.',
+    });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    let newUser;
+    if (isDbConnected() && prisma) {
+      // Check existing user in Neon DB
+      const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Email sudah terdaftar. Silakan login.' });
+      }
+
+      newUser = await prisma.user.create({
+        data: {
+          name: name.trim(),
+          email: cleanEmail,
+          password: hashedPassword,
+          plan: 'Free',
+          emailReminders: true,
+          workspaceName: `${name.trim()}'s workspace`,
+        },
+        select: { id: true, name: true, email: true, plan: true, emailReminders: true, workspaceName: true },
+      });
+    } else {
+      // In-Memory Fallback
+      const existing = inMemoryUsers.find((u) => u.email === cleanEmail);
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Email sudah terdaftar. Silakan login.' });
+      }
+
+      newUser = {
+        id: Date.now(),
+        name: name.trim(),
+        email: cleanEmail,
+        passwordHash: hashedPassword,
+        plan: 'Free',
+        emailReminders: true,
+        workspaceName: `${name.trim()}'s workspace`,
+      };
+      inMemoryUsers.push(newUser);
+      userProfile = { ...newUser, analyzedCount: 0, limitCount: 5 };
+    }
+
+    const token = jwt.sign(
+      { id: newUser.id, email: newUser.email, name: newUser.name },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Akun CLARIQ berhasil dibuat!',
+      token,
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        plan: newUser.plan,
+      },
+    });
+  } catch (err) {
+    console.error('Register error:', err);
+    res.status(500).json({ success: false, message: 'Gagal membuat akun.', error: err.message });
+  }
+});
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Email dan kata sandi wajib diisi.',
+    });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    let foundUser;
+    let isValidPassword = false;
+
+    if (isDbConnected() && prisma) {
+      foundUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
+      if (foundUser) {
+        isValidPassword = await bcrypt.compare(password, foundUser.password);
+      }
+    } else {
+      foundUser = inMemoryUsers.find((u) => u.email === cleanEmail);
+      if (foundUser) {
+        isValidPassword = await bcrypt.compare(password, foundUser.passwordHash);
+      }
+    }
+
+    if (!foundUser || !isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'Email atau kata sandi tidak cocok. Silakan periksa kembali.',
+      });
+    }
+
+    const token = jwt.sign(
+      { id: foundUser.id, email: foundUser.email, name: foundUser.name },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Update session info
+    userProfile.name = foundUser.name;
+    userProfile.email = foundUser.email;
+    userProfile.plan = foundUser.plan;
+
+    res.json({
+      success: true,
+      message: 'Berhasil masuk ke CLARIQ!',
+      token,
+      user: {
+        id: foundUser.id,
+        name: foundUser.name,
+        email: foundUser.email,
+        plan: foundUser.plan,
+      },
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ success: false, message: 'Gagal memproses login.', error: err.message });
+  }
+});
+
+// Get Current User Profile (Me)
+app.get('/api/auth/me', async (req, res) => {
+  const user = await getUserFromReq(req);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Belum login atau token kedaluwarsa.' });
+  }
+  res.json({ success: true, user });
+});
+
+// ==========================================
+// SYSTEM & HEALTH CHECK
+// ==========================================
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     system: 'CLARIQ AI Contract Platform Backend',
+    database: isDbConnected() ? 'Neon PostgreSQL Connected' : 'In-Memory Mode (DATABASE_URL ready)',
     uptime: `${Math.floor(process.uptime())}s`,
     timestamp: new Date().toISOString(),
     contractsCount: contracts.length,
@@ -370,7 +590,7 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-// Contracts List (with filter & search)
+// Contracts List
 app.get('/api/contracts', (req, res) => {
   const { search = '', filter = 'All contracts' } = req.query;
   let results = [...contracts];
@@ -418,7 +638,6 @@ app.post('/api/contracts', (req, res) => {
   const { name, company, type, fileName } = req.body;
   const contractName = (name || fileName || 'Uploaded Document').replace(/\.[^.]+$/, '');
   
-  // Intelligent mock classification based on name
   let docType = type || 'Other';
   let color = 'blue';
   let status = 'Review';
@@ -524,7 +743,7 @@ app.delete('/api/contracts/:id', (req, res) => {
   });
 });
 
-// AI Contract Chat Engine (Ask Your Contract)
+// AI Chat
 app.post(['/api/chat', '/api/contracts/:id/chat'], (req, res) => {
   const contractId = req.params.id ? parseInt(req.params.id, 10) : req.body.contractId || 1;
   const question = (req.body.question || req.body.message || '').trim();
@@ -535,32 +754,57 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], (req, res) => {
 
   const contract = contracts.find((c) => c.id === contractId) || contracts[0];
   const q = question.toLowerCase();
+  const lang = (req.body.lang || req.query.lang || 'id').toLowerCase();
 
   let source = 1;
   let answer = '';
 
-  // Smart Contextual NLP Answering
-  if (/gaji|salary|remunerasi|bayar|upah|uang|benefit|tunjangan/i.test(q)) {
-    source = 0;
-    answer = `Berdasarkan Pasal 3 (Article 3 — Remuneration) pada "${contract.name}", gaji bulanan kotor Anda adalah Rp12.000.000 dan dibayarkan paling lambat setiap tanggal 25. Tunjangan kesehatan dan BPJS diberikan sesuai kebijakan perusahaan.`;
-  } else if (/keluar|resign|terminat|berhenti|denda|pinalti|putus|phk/i.test(q)) {
-    source = 1;
-    answer = `Perhatian penting pada Pasal 8 (Article 8 — Termination): Jika Anda mengundurkan diri sebelum tanggal 12 Januari 2028, Anda diwajibkan memberikan pemberitahuan tertulis 30 hari sebelumnya dan dapat dikenakan ganti rugi sebesar 1 (satu) bulan gaji pokok (Rp12.000.000). Sangat disarankan untuk mendiskusikan klausul ini dengan HR.`;
-  } else if (/perpanjang|renew|otomatis|habis|berakhir|durasi|expire|jangka waktu|sampai kapan/i.test(q)) {
-    source = 2;
-    answer = `Sesuai Pasal 9 (Article 9 — Renewal), masa kontrak berlaku hingga 12 Januari 2028. Kontrak ini akan DIPERPANJANG OTOMATIS selama 12 bulan berikutnya kecuali Anda mengirimkan surat pemberitahuan tertulis paling lambat 30 hari sebelum berakhir (maksimal tanggal 12 Desember 2027).`;
-  } else if (/rahasia|confidential|nda|bocor|dokumen/i.test(q)) {
-    source = 3;
-    answer = `Berdasarkan Pasal 6 (Article 6 — Confidentiality), Anda wajib menjaga seluruh informasi rahasia internal dan data klien perusahaan, baik selama masih bekerja maupun setelah kontrak berakhir.`;
-  } else if (/tugas|tanggung jawab|posisi|duties|responsib|jam kerja|peran|wfh/i.test(q)) {
-    source = 4;
-    answer = `Menurut Pasal 2 (Article 2 — Duties), peran Anda adalah Product Designer dengan beban kerja 40 jam per minggu, melapor ke Head of Design. Segala perubahan deskripsi pekerjaan utama wajib disetujui secara tertulis oleh kedua belah pihak.`;
-  } else if (/cuti|libur|sick|sakit/i.test(q)) {
-    source = 0;
-    answer = `Hak cuti tahunan diberikan sebanyak 12 hari kerja per tahun setelah melewati masa kerja 3 bulan (probation), dengan pengajuan izin minimal 3 hari kerja sebelum tanggal cuti.`;
+  if (lang === 'en') {
+    if (/pay|salary|remunerat|wage|money|benefit/i.test(q)) {
+      source = 0;
+      answer = `Pursuant to Article 3 (Remuneration) in "${contract.name}", your gross monthly salary is Rp12,000,000, payable no later than the 25th day of each month. Standard statutory benefits follow company policy.`;
+    } else if (/resign|terminat|quit|leave|penalty|early/i.test(q)) {
+      source = 1;
+      answer = `Important consideration under Article 8 (Termination): Resigning before 12 January 2028 requires 30 days’ written notice and may obligate you to pay compensation equal to one month’s gross salary (Rp12,000,000). Discuss this clause with HR prior to signing.`;
+    } else if (/renew|automatic|expire|duration|end|period/i.test(q)) {
+      source = 2;
+      answer = `Under Article 9 (Renewal), this sample agreement runs through 12 January 2028. It automatically renews for another 12 months unless either party provides written notice at least 30 days prior (by 12 December 2027).`;
+    } else if (/confidential|nda|secret|data/i.test(q)) {
+      source = 3;
+      answer = `According to Article 6 (Confidentiality), you are obligated to protect all non-public internal information and client materials during and following your tenure.`;
+    } else if (/dut|responsib|role|hour|wfh|job/i.test(q)) {
+      source = 4;
+      answer = `Per Article 2 (Duties), your role is Product Designer for 40 hours per week, reporting to the Head of Design. Any material modifications to duties must be mutually agreed in writing.`;
+    } else if (/leave|vacation|holiday|sick/i.test(q)) {
+      source = 0;
+      answer = `Annual paid leave is 12 working days per year following completion of the 3-month probation period, requiring request submission at least 3 business days in advance.`;
+    } else {
+      source = 1;
+      answer = `Based on AI analysis of "${contract.name}": Key articles to examine include monthly compensation (Article 3), 30-day resignation notice & penalty (Article 8), and automatic renewal terms (Article 9). Feel free to ask about any specific clause or numerical figure!`;
+    }
   } else {
-    source = 1;
-    answer = `Berdasarkan analisis AI pada dokumen "${contract.name}": Pokok utama yang perlu diperhatikan meliputi ketentuan remunerasi bulanan (Pasal 3), kewajiban pemberitahuan 30 hari jika ingin keluar (Pasal 8), serta batas perpanjangan otomatis (Pasal 9). Anda dapat menanyakan detail nominal, batas waktu, atau risiko pasal tertentu secara spesifik!`;
+    if (/gaji|salary|remunerasi|bayar|upah|uang|benefit|tunjangan/i.test(q)) {
+      source = 0;
+      answer = `Berdasarkan Pasal 3 (Article 3 — Remuneration) pada "${contract.nameId || contract.name}", gaji bulanan kotor Anda adalah Rp12.000.000 dan dibayarkan paling lambat setiap tanggal 25. Tunjangan kesehatan dan BPJS diberikan sesuai kebijakan perusahaan.`;
+    } else if (/keluar|resign|terminat|berhenti|denda|pinalti|putus|phk/i.test(q)) {
+      source = 1;
+      answer = `Perhatian penting pada Pasal 8 (Article 8 — Termination): Jika Anda mengundurkan diri sebelum tanggal 12 Januari 2028, Anda diwajibkan memberikan pemberitahuan tertulis 30 hari sebelumnya dan dapat dikenakan ganti rugi sebesar 1 (satu) bulan gaji pokok (Rp12.000.000). Sangat disarankan untuk mendiskusikan klausul ini dengan HR.`;
+    } else if (/perpanjang|renew|otomatis|habis|berakhir|durasi|expire|jangka waktu|sampai kapan/i.test(q)) {
+      source = 2;
+      answer = `Sesuai Pasal 9 (Article 9 — Renewal), masa kontrak berlaku hingga 12 Januari 2028. Kontrak ini akan DIPERPANJANG OTOMATIS selama 12 bulan berikutnya kecuali Anda mengirimkan surat pemberitahuan tertulis paling lambat 30 hari sebelum berakhir (maksimal tanggal 12 Desember 2027).`;
+    } else if (/rahasia|confidential|nda|bocor|dokumen/i.test(q)) {
+      source = 3;
+      answer = `Berdasarkan Pasal 6 (Article 6 — Confidentiality), Anda wajib menjaga seluruh informasi rahasia internal dan data klien perusahaan, baik selama masih bekerja maupun setelah kontrak berakhir.`;
+    } else if (/tugas|tanggung jawab|posisi|duties|responsib|jam kerja|peran|wfh/i.test(q)) {
+      source = 4;
+      answer = `Menurut Pasal 2 (Article 2 — Duties), peran Anda adalah Product Designer dengan beban kerja 40 jam per minggu, melapor ke Head of Design. Segala perubahan deskripsi pekerjaan utama wajib disetujui secara tertulis oleh kedua belah pihak.`;
+    } else if (/cuti|libur|sick|sakit/i.test(q)) {
+      source = 0;
+      answer = `Hak cuti tahunan diberikan sebanyak 12 hari kerja per tahun setelah melewati masa kerja 3 bulan (probation), dengan pengajuan izin minimal 3 hari kerja sebelum tanggal cuti.`;
+    } else {
+      source = 1;
+      answer = `Berdasarkan analisis AI pada dokumen "${contract.nameId || contract.name}": Pokok utama yang perlu diperhatikan meliputi ketentuan remunerasi bulanan (Pasal 3), kewajiban pemberitahuan 30 hari jika ingin keluar (Pasal 8), serta batas perpanjangan otomatis (Pasal 9). Anda dapat menanyakan detail nominal, batas waktu, atau risiko pasal tertentu secara spesifik!`;
+    }
   }
 
   res.json({
@@ -606,19 +850,38 @@ app.put('/api/dates/:id/reminder', (req, res) => {
 });
 
 // User Profile & Settings
-app.get('/api/user', (req, res) => {
+app.get('/api/user', async (req, res) => {
+  const loggedUser = await getUserFromReq(req);
+  if (loggedUser) {
+    return res.json({ success: true, data: loggedUser });
+  }
   res.json({
     success: true,
     data: userProfile,
   });
 });
 
-app.put('/api/user', (req, res) => {
+app.put('/api/user', async (req, res) => {
   const { name, email, emailReminders, plan } = req.body;
   if (name !== undefined) userProfile.name = name.trim();
   if (email !== undefined) userProfile.email = email.trim();
   if (emailReminders !== undefined) userProfile.emailReminders = Boolean(emailReminders);
   if (plan !== undefined) userProfile.plan = plan;
+
+  const loggedUser = await getUserFromReq(req);
+  if (loggedUser && isDbConnected() && prisma) {
+    try {
+      const updated = await prisma.user.update({
+        where: { id: loggedUser.id },
+        data: {
+          name: name ? name.trim() : undefined,
+          emailReminders: emailReminders !== undefined ? Boolean(emailReminders) : undefined,
+          plan: plan || undefined,
+        },
+      });
+      return res.json({ success: true, message: 'Profil berhasil diperbarui di database!', data: updated });
+    } catch {}
+  }
 
   res.json({
     success: true,
@@ -645,11 +908,35 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`===============================================`);
   console.log(`⚖️  CLARIQ AI Contract Platform - Backend Service`);
   console.log(`📡 Server running on: http://localhost:${PORT}`);
+  console.log(`🔐 Auth Endpoints: /api/auth/register & /api/auth/login`);
   console.log(`🩺 Health API: http://localhost:${PORT}/api/health`);
-  console.log(`📑 Contracts API: http://localhost:${PORT}/api/contracts`);
   console.log(`===============================================`);
+
+  // Auto-seed demo user & sync profile with Neon DB if connected
+  try {
+    if (isDbConnected() && prisma) {
+      const demoEmail = 'putri.anindya@gmail.com';
+      const existing = await prisma.user.findUnique({ where: { email: demoEmail } });
+      if (!existing) {
+        const passwordHash = await bcrypt.hash('password123', 10);
+        await prisma.user.create({
+          data: {
+            name: 'Putri Anindya',
+            email: demoEmail,
+            password: passwordHash,
+            plan: 'Free',
+            emailReminders: true,
+            workspaceName: 'Personal workspace',
+          },
+        });
+        console.log('✅ Demo user (putri.anindya@gmail.com / password123) siap digunakan!');
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Seeding demo user skipped:', err.message);
+  }
 });

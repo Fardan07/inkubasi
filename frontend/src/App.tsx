@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { translations, type Lang } from "./i18n"
 
 type IconName = "grid" | "file" | "compare" | "calendar" | "settings" | "search" | "bell" | "chevron" | "arrow" | "plus" | "upload" | "check" | "shield" | "spark" | "clock" | "close" | "menu" | "help" | "logout" | "chat" | "download" | "external" | "warning" | "send" | "lock" | "dots"
 function Icon({
@@ -177,6 +178,96 @@ function Logo({ onClick }: { onClick: () => void }) {
     </button>
   )
 }
+function IndonesiaFlag({ size = 15 }: { size?: number }) {
+  const w = Math.round(size * 1.35)
+  const h = Math.round((w * 2) / 3)
+  return (
+    <svg
+      viewBox="0 0 24 16"
+      width={w}
+      height={h}
+      style={{
+        borderRadius: "2px",
+        overflow: "hidden",
+        boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+        display: "inline-block",
+        verticalAlign: "middle",
+        flexShrink: 0,
+      }}
+      aria-label="Lambang Bendera Indonesia"
+    >
+      <rect width="24" height="8" fill="#E70011" />
+      <rect y="8" width="24" height="8" fill="#FFFFFF" />
+    </svg>
+  )
+}
+function UKFlag({ size = 15 }: { size?: number }) {
+  const w = Math.round(size * 1.35)
+  const h = Math.round((w * 2) / 3)
+  return (
+    <svg
+      viewBox="0 0 60 40"
+      width={w}
+      height={h}
+      style={{
+        borderRadius: "2px",
+        overflow: "hidden",
+        boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+        display: "inline-block",
+        verticalAlign: "middle",
+        flexShrink: 0,
+      }}
+      aria-label="Lambang Bendera Inggris"
+    >
+      <clipPath id="uk-flag-clip-path">
+        <rect width="60" height="40" />
+      </clipPath>
+      <g clipPath="url(#uk-flag-clip-path)">
+        <path d="M0 0h60v40H0z" fill="#012169" />
+        <path d="M0 0L60 40M60 0L0 40" stroke="#FFFFFF" strokeWidth="8" />
+        <path d="M0 0L60 40" stroke="#C8102E" strokeWidth="4.5" />
+        <path d="M60 0L0 40" stroke="#C8102E" strokeWidth="4.5" />
+        <path d="M30 0v40M0 20h60" stroke="#FFFFFF" strokeWidth="13" />
+        <path d="M30 0v40M0 20h60" stroke="#C8102E" strokeWidth="7.5" />
+      </g>
+    </svg>
+  )
+}
+function LanguageSwitcher({
+  lang,
+  onChange,
+}: {
+  lang: Lang
+  onChange: (next: Lang) => void
+}) {
+  const isId = lang === "id"
+  return (
+    <button
+      type="button"
+      className="lang-single-btn"
+      onClick={() => onChange(isId ? "en" : "id")}
+      title={isId ? "Ganti ke English" : "Ganti ke Bahasa Indonesia"}
+      aria-label={isId ? "Beralih ke Bahasa Inggris" : "Switch to Indonesian"}
+    >
+      <span className="lang-flip-box">
+        <span className={`lang-flip-face ${isId ? "active" : "inactive"}`}>
+          <IndonesiaFlag size={14} />
+          <span className="lang-code-text">ID</span>
+        </span>
+        <span className={`lang-flip-face ${!isId ? "active" : "inactive"}`}>
+          <UKFlag size={14} />
+          <span className="lang-code-text">EN</span>
+        </span>
+      </span>
+      <span className="lang-swap-hint" aria-hidden="true">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 10h14l-4-4" />
+          <path d="M17 14H3l4 4" />
+        </svg>
+      </span>
+    </button>
+  )
+}
 function Button({
   children,
   onClick,
@@ -185,6 +276,7 @@ function Button({
   type = "button",
   disabled = false,
   className = "",
+  style,
 }: {
   children: ReactNode
   onClick?: () => void
@@ -193,6 +285,7 @@ function Button({
   type?: "button" | "submit"
   disabled?: boolean
   className?: string
+  style?: CSSProperties
 }) {
   return (
     <button
@@ -200,6 +293,7 @@ function Button({
       className={`btn btn-${variant} ${className}`}
       onClick={onClick}
       disabled={disabled}
+      style={style}
     >
       {icon && <Icon name={icon} size={17} />}
       {children}
@@ -207,11 +301,11 @@ function Button({
   )
 }
 function Badge({ status }: { status: string }) {
-  const kind = /safe|complete|active/i.test(status)
+  const kind = /safe|complete|active|aman|selesai|aktif/i.test(status)
     ? "safe"
-    : /attention/i.test(status)
+    : /attention|perhatian|bahaya|risiko/i.test(status)
       ? "attention"
-      : /review|remaining|due/i.test(status)
+      : /review|remaining|due|tinjau|sisa|jatuh tempo/i.test(status)
         ? "review"
         : "neutral"
   return (
@@ -245,20 +339,30 @@ type Page = "dashboard" | "contracts" | "analysis" | "chat" | "compare" | "dates
 type Clause = {
   id?: number
   title: string
+  titleId?: string
   status: string
+  statusId?: string
   source: string
+  sourceId?: string
   text: string
+  textId?: string
   meaning: string
+  meaningEn?: string
   why: string
+  whyEn?: string
   original: string
 }
 type Contract = {
   id: number
   name: string
+  nameId?: string
   company: string
   type: string
+  typeId?: string
   status: string
+  statusId?: string
   date: string
+  dateId?: string
   color: string
   summary?: string
   riskScore?: number
@@ -266,97 +370,231 @@ type Contract = {
   meta?: Record<string, string>
   clauses?: Clause[]
 }
+
+function getContractType(type?: string, currentLang: Lang = "id"): string {
+  if (!type) return ""
+  const lower = type.toLowerCase()
+  if (currentLang === "id") {
+    if (lower.includes("employ") || lower.includes("kerja") || lower.includes("tenaga")) return "Ketenagakerjaan"
+    if (lower.includes("freelance") || lower.includes("lepas")) return "Pekerja Lepas"
+    if (lower.includes("business") || lower.includes("vendor") || lower.includes("bisnis")) return "Bisnis / Vendor"
+    if (lower.includes("rental") || lower.includes("lease") || lower.includes("sewa")) return "Sewa Menyewa"
+    if (lower.includes("other") || lower.includes("lain")) return "Lainnya"
+    return type
+  } else {
+    if (lower.includes("ketenagakerjaan") || lower.includes("tenaga") || lower.includes("employ")) return "Employment"
+    if (lower.includes("pekerja lepas") || lower.includes("lepas") || lower.includes("freelance")) return "Freelance"
+    if (lower.includes("bisnis") || lower.includes("business")) return "Business"
+    if (lower.includes("sewa") || lower.includes("rental") || lower.includes("lease")) return "Rental"
+    if (lower.includes("lain") || lower.includes("other")) return "Other"
+    return type
+  }
+}
+
+function getContractStatus(status?: string, currentLang: Lang = "id"): string {
+  if (!status) return ""
+  const lower = status.toLowerCase()
+  if (currentLang === "id") {
+    if (lower.includes("attention") || lower.includes("perhatian") || lower.includes("bahaya")) return "Perlu Perhatian"
+    if (lower.includes("review") || lower.includes("tinjau")) return "Perlu Tinjauan"
+    if (lower.includes("safe") || lower.includes("aman")) return "Aman"
+    if (lower.includes("complete") || lower.includes("selesai")) return "Selesai"
+    return status
+  } else {
+    if (lower.includes("perhatian") || lower.includes("attention")) return "Needs Attention"
+    if (lower.includes("tinjau") || lower.includes("review")) return "Review"
+    if (lower.includes("aman") || lower.includes("safe")) return "Safe"
+    if (lower.includes("selesai") || lower.includes("complete")) return "Complete"
+    return status
+  }
+}
+
+function getContractName(c?: Contract, currentLang: Lang = "id"): string {
+  if (!c) return ""
+  if (currentLang === "id") {
+    if (c.nameId) return c.nameId
+    if (c.id === 1 || /employment/i.test(c.name)) return "Perjanjian Kerja Karyawan"
+    if (c.id === 2 || /freelance/i.test(c.name)) return "Kontrak Kerja Lepas (Freelance)"
+    if (c.id === 3 || /vendor/i.test(c.name)) return "Perjanjian Layanan Vendor"
+    if (c.id === 4 || /apartment|lease/i.test(c.name)) return "Perjanjian Sewa Apartemen"
+    return c.name
+  } else {
+    if (c.id === 1 || /perjanjian kerja/i.test(c.name)) return "Employment Agreement"
+    if (c.id === 2 || /kerja lepas/i.test(c.name)) return "Freelance Agreement"
+    if (c.id === 3 || /layanan vendor/i.test(c.name)) return "Vendor Agreement"
+    if (c.id === 4 || /sewa apartemen/i.test(c.name)) return "Apartment Lease"
+    return c.name
+  }
+}
+
+function getContractDate(dateStr?: string, currentLang: Lang = "id"): string {
+  if (!dateStr) return ""
+  if (currentLang === "id") {
+    const match = dateStr.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/)
+    if (match) {
+      const monthMap: Record<string, string> = {
+        Jan: "Jan", Feb: "Feb", Mar: "Mar", Apr: "Apr", May: "Mei", Jun: "Jun",
+        Jul: "Jul", Aug: "Agu", Sep: "Sep", Oct: "Okt", Nov: "Nov", Dec: "Des"
+      }
+      const m = monthMap[match[1]] || match[1]
+      return `${match[2]} ${m} ${match[3]}`
+    }
+    return dateStr
+  } else {
+    const match = dateStr.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/)
+    if (match) {
+      const revMonthMap: Record<string, string> = {
+        Mei: "May", Agu: "Aug", Okt: "Oct", Des: "Dec"
+      }
+      const m = revMonthMap[match[2]] || match[2]
+      return `${m} ${match[1]}, ${match[3]}`
+    }
+    return dateStr
+  }
+}
+
 const initialContracts: Contract[] = [
   {
     id: 1,
     name: "Employment Agreement",
+    nameId: "Perjanjian Kerja Karyawan",
     company: "PT Example Indonesia",
     type: "Employment",
+    typeId: "Ketenagakerjaan",
     status: "Needs Attention",
+    statusId: "Perlu Perhatian",
     date: "Nov 12, 2027",
+    dateId: "12 Nov 2027",
     color: "blue",
   },
   {
     id: 2,
     name: "Freelance Agreement",
+    nameId: "Kontrak Kerja Lepas (Freelance)",
     company: "Studio XYZ",
     type: "Freelance",
+    typeId: "Pekerja Lepas",
     status: "Review",
+    statusId: "Perlu Tinjauan",
     date: "Nov 10, 2027",
+    dateId: "10 Nov 2027",
     color: "lavender",
   },
   {
     id: 3,
     name: "Vendor Agreement",
+    nameId: "Perjanjian Layanan Vendor",
     company: "Kopi Kita",
     type: "Business",
+    typeId: "Bisnis / Vendor",
     status: "Safe",
+    statusId: "Aman",
     date: "Nov 8, 2027",
+    dateId: "8 Nov 2027",
     color: "mint",
   },
   {
     id: 4,
     name: "Apartment Lease",
+    nameId: "Perjanjian Sewa Apartemen",
     company: "Bumi Residence",
     type: "Rental",
+    typeId: "Sewa Menyewa",
     status: "Safe",
+    statusId: "Aman",
     date: "Nov 5, 2027",
+    dateId: "5 Nov 2027",
     color: "peach",
   },
 ]
 const clauses = [
   {
     title: "Payment Terms",
+    titleId: "Ketentuan Pembayaran",
     status: "Safe",
+    statusId: "Aman",
     source: "Article 3 — Remuneration",
+    sourceId: "Pasal 3 — Remunerasi",
     text: "Your monthly salary is paid by the 25th, with clearly defined benefits.",
+    textId: "Gaji bulanan dibayarkan paling lambat tanggal 25, dengan tunjangan yang jelas.",
     meaning:
       "Gaji sebesar Rp12.000.000 dibayarkan setiap tanggal 25. Anda juga berhak menerima tunjangan sesuai ketentuan perusahaan.",
+    meaningEn:
+      "A salary of IDR 12,000,000 is paid on the 25th of each month. You are also entitled to standard employee benefits.",
     why: "Jadwal pembayaran yang jelas membantu Anda merencanakan keuangan dan memastikan kewajiban perusahaan.",
+    whyEn: "A clear payment schedule ensures financial predictability and confirms employer obligations.",
     original:
       "The Employee shall receive a gross monthly salary of IDR 12,000,000, payable no later than the 25th day of each calendar month.",
   },
   {
     title: "Early Termination",
+    titleId: "Pengakhiran Kontrak Dini",
     status: "Needs Attention",
+    statusId: "Perlu Perhatian",
     source: "Article 8 — Termination",
+    sourceId: "Pasal 8 — Pengakhiran",
     text: "Leaving before the contract ends may require a payment of one month’s salary.",
+    textId: "Resign sebelum masa kontrak selesai dapat mewajibkan kompensasi 1 bulan gaji.",
     meaning:
       "Jika Anda mengundurkan diri sebelum kontrak berakhir, Anda perlu memberikan pemberitahuan tertulis 30 hari sebelumnya. Anda juga dapat diwajibkan membayar kompensasi sebesar satu bulan gaji.",
+    meaningEn:
+      "Resigning before the contract ends requires 30 days’ written notice and you may be obligated to compensate the company with 1 month’s gross salary.",
     why: "Anda mungkin perlu menyiapkan biaya tambahan jika ingin berpindah pekerjaan sebelum masa kontrak selesai. Diskusikan ketentuan ini dengan perusahaan sebelum menandatangani.",
+    whyEn: "You may need to prepare funds if switching jobs before completion. Clarify this clause before signing.",
     original:
       "Either party may terminate this Agreement with thirty (30) days’ prior written notice. If the Employee terminates before the agreed end date, the Employee may be required to compensate the Employer an amount equivalent to one (1) month’s gross salary.",
   },
   {
     title: "Automatic Renewal",
+    titleId: "Perpanjangan Otomatis",
     status: "Review",
+    statusId: "Perlu Ditinjau",
     source: "Article 9 — Renewal",
+    sourceId: "Pasal 9 — Perpanjangan",
     text: "Your contract renews automatically unless you give 30 days’ written notice.",
+    textId: "Kontrak diperpanjang otomatis jika Anda tidak memberi surat pemberitahuan 30 hari sebelum selesai.",
     meaning:
       "Kontrak akan diperpanjang secara otomatis selama 12 bulan jika tidak ada pemberitahuan tertulis paling lambat 30 hari sebelum tanggal berakhir.",
+    meaningEn:
+      "The agreement renews automatically for 12 months unless either party provides written notice 30 days prior to expiry.",
     why: "Catat batas waktu pemberitahuan agar Anda tidak terikat masa kontrak baru tanpa menyadarinya.",
+    whyEn: "Keep track of deadlines so you do not enter a new commitment without realizing it.",
     original:
       "This Agreement shall automatically renew for a further twelve (12) months unless either party provides written notice at least thirty (30) days before expiry.",
   },
   {
     title: "Confidentiality",
+    titleId: "Kerahasiaan Informasi",
     status: "Safe",
+    statusId: "Aman",
     source: "Article 6 — Confidentiality",
+    sourceId: "Pasal 6 — Kerahasiaan",
     text: "Keep non-public company information confidential during and after employment.",
+    textId: "Jaga kerahasiaan data internal perusahaan selama dan setelah masa kerja.",
     meaning:
       "Anda harus menjaga kerahasiaan informasi perusahaan yang tidak tersedia untuk umum, termasuk setelah hubungan kerja berakhir.",
+    meaningEn:
+      "You are required to protect non-public business information both during and after your employment.",
     why: "Hindari membagikan dokumen internal atau informasi klien tanpa izin tertulis dari perusahaan.",
+    whyEn: "Avoid sharing proprietary documents or client data without written consent.",
     original:
       "The Employee agrees not to disclose any non-public business information during or after the term of employment, except as required by law.",
   },
   {
     title: "Responsibilities",
+    titleId: "Tanggung Jawab & Jam Kerja",
     status: "Safe",
+    statusId: "Aman",
     source: "Article 2 — Duties",
+    sourceId: "Pasal 2 — Tugas",
     text: "Your role, working hours, and reporting structure are clearly outlined.",
+    textId: "Peran, 40 jam kerja per minggu, dan jalur pelaporan kerja tertera jelas.",
     meaning:
       "Anda bekerja sebagai Product Designer selama 40 jam per minggu dan melapor kepada Head of Design. Perubahan tanggung jawab harus disepakati secara tertulis.",
+    meaningEn:
+      "You work as a Product Designer for 40 hours per week reporting to the Head of Design. Changes must be agreed in writing.",
     why: "Ruang lingkup pekerjaan yang jelas membantu mencegah tugas tambahan di luar kesepakatan awal.",
+    whyEn: "Clear scopes prevent unsolicited out-of-scope work beyond agreed expectations.",
     original:
       "The Employee shall serve as Product Designer for forty (40) hours per week and report to the Head of Design. Material changes to duties shall be agreed in writing.",
   },
@@ -366,49 +604,69 @@ const dateItems = [
     day: "25",
     month: "NOV",
     title: "Monthly payment",
+    titleId: "Pembayaran gaji bulanan",
     contract: "Employment Agreement",
+    contractId: "Perjanjian Kerja",
     date: "25 November 2027",
+    dateId: "25 November 2027",
     tag: "13 days remaining",
+    tagId: "Sisa 13 hari",
     kind: "mint",
   },
   {
     day: "30",
     month: "NOV",
     title: "Notice deadline",
+    titleId: "Batas pemberitahuan resign",
     contract: "Freelance Agreement",
+    contractId: "Perjanjian Freelance",
     date: "30 November 2027",
+    dateId: "30 November 2027",
     tag: "18 days remaining",
+    tagId: "Sisa 18 hari",
     kind: "amber",
   },
   {
     day: "12",
     month: "DEC",
     title: "Renewal deadline",
+    titleId: "Batas waktu perpanjangan",
     contract: "Employment Agreement",
+    contractId: "Perjanjian Kerja",
     date: "12 December 2027",
+    dateId: "12 Desember 2027",
     tag: "30 days remaining",
+    tagId: "Sisa 30 hari",
     kind: "blue",
   },
   {
     day: "12",
     month: "JAN",
     title: "Contract expiration",
+    titleId: "Masa kontrak berakhir",
     contract: "Employment Agreement",
+    contractId: "Perjanjian Kerja",
     date: "12 January 2028",
+    dateId: "12 Januari 2028",
     tag: "61 days remaining",
+    tagId: "Sisa 61 hari",
     kind: "blue",
   },
   {
     day: "13",
     month: "JAN",
     title: "Renewed contract starts",
+    titleId: "Kontrak baru dimulai",
     contract: "Employment Agreement",
+    contractId: "Perjanjian Kerja",
     date: "13 January 2028",
+    dateId: "13 Januari 2028",
     tag: "62 days remaining",
+    tagId: "Sisa 62 hari",
     kind: "mint",
   },
 ]
-function DocumentArt() {
+function DocumentArt({ lang = "id" }: { lang?: Lang }) {
   return (
     <div className="document-art" aria-hidden="true">
       <div className="orbit orbit-one" />
@@ -426,7 +684,7 @@ function DocumentArt() {
             <Icon name="file" size={20} />
           </div>
           <div>
-            <b>YOUR CONTRACT</b>
+            <b>{lang === "id" ? "KONTRAK ANDA" : "YOUR CONTRACT"}</b>
             <span className="paper-short" />
           </div>
         </div>
@@ -449,7 +707,7 @@ function DocumentArt() {
         <span className="art-check">
           <Icon name="check" size={13} />
         </span>
-        Clarity, delivered.
+        {lang === "id" ? "Kejelasan terwujud." : "Clarity, delivered."}
       </div>
       <div className="art-spark">
         <Icon name="spark" size={20} />
@@ -479,7 +737,7 @@ export default function App() {
   const [contracts, setContracts] = useState(initialContracts)
   const [selected, setSelected] = useState(initialContracts[0])
   const [search, setSearch] = useState("")
-  const [filter, setFilter] = useState("All contracts")
+  const [filter, setFilter] = useState("all")
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadError, setUploadError] = useState("")
@@ -507,9 +765,72 @@ export default function App() {
   const [emailReminders, setEmailReminders] = useState(true)
   const [plan, setPlan] = useState("Free")
   const [planModal, setPlanModal] = useState<string | null>(null)
+  const [authModal, setAuthModal] = useState<"login" | "register" | null>(null)
+  const [authName, setAuthName] = useState("")
+  const [authEmail, setAuthEmail] = useState("")
+  const [authPassword, setAuthPassword] = useState("")
+  const [authError, setAuthError] = useState("")
+  const [authLoading, setAuthLoading] = useState(false)
+  const [token, setToken] = useState<string>(() => localStorage.getItem("clariq_token") || "")
+  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("clariq_lang") as Lang) || "id")
+  const t = translations[lang]
+
+  useEffect(() => {
+    localStorage.setItem("clariq_lang", lang)
+    document.documentElement.lang = lang
+  }, [lang])
+
   const fileInput = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const chatBottom = useRef<HTMLDivElement>(null)
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthError("")
+    setAuthLoading(true)
+    const endpoint = authModal === "login" ? "/api/auth/login" : "/api/auth/register"
+    const payload =
+      authModal === "login"
+        ? { email: authEmail, password: authPassword }
+        : { name: authName, email: authEmail, password: authPassword }
+
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        setAuthError(data.message || "Terjadi kesalahan saat otentikasi.")
+        setAuthLoading(false)
+        return
+      }
+
+      setToken(data.token)
+      localStorage.setItem("clariq_token", data.token)
+      if (data.user?.name) setName(data.user.name)
+      if (data.user?.email) setEmail(data.user.email)
+      if (data.user?.plan) setPlan(data.user.plan)
+      setAuthModal(null)
+      setAuthEmail("")
+      setAuthPassword("")
+      setAuthName("")
+      setToast(data.message || "Selamat datang di CLARIQ!")
+      if (page === "landing") navigate("dashboard")
+    } catch {
+      setAuthError("Gagal terhubung ke server backend.")
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogout = () => {
+    setToken("")
+    localStorage.removeItem("clariq_token")
+    setProfile(false)
+    setToast("Anda telah keluar akun.")
+  }
 
   const activeClauses: Clause[] =
     selected && selected.clauses && selected.clauses.length > 0
@@ -521,8 +842,15 @@ export default function App() {
       .then((res) => res.json())
       .then((json) => {
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          setContracts(json.data)
-          setSelected((prev) => json.data.find((c: any) => c.id === prev.id) || json.data[0])
+          const enriched = json.data.map((c: any) => ({
+            ...c,
+            nameId: c.nameId || (c.id === 1 ? "Perjanjian Kerja Karyawan" : c.id === 2 ? "Kontrak Kerja Lepas (Freelance)" : c.id === 3 ? "Perjanjian Layanan Vendor" : c.id === 4 ? "Perjanjian Sewa Apartemen" : c.name),
+            typeId: c.typeId || (c.type === "Employment" ? "Ketenagakerjaan" : c.type === "Freelance" ? "Pekerja Lepas" : c.type === "Business" ? "Bisnis / Vendor" : c.type === "Rental" ? "Sewa Menyewa" : c.type),
+            statusId: c.statusId || (c.status === "Needs Attention" ? "Perlu Perhatian" : c.status === "Review" ? "Perlu Tinjauan" : c.status === "Safe" ? "Aman" : c.status),
+            dateId: c.dateId || (c.date === "Nov 12, 2027" ? "12 Nov 2027" : c.date === "Nov 10, 2027" ? "10 Nov 2027" : c.date === "Nov 8, 2027" ? "8 Nov 2027" : c.date === "Nov 5, 2027" ? "5 Nov 2027" : c.date),
+          }))
+          setContracts(enriched)
+          setSelected((prev) => enriched.find((c: any) => c.id === prev.id) || enriched[0])
         }
       })
       .catch(() => {})
@@ -546,7 +874,7 @@ export default function App() {
     setNotifications(false)
     setProfile(false)
     setSearch("")
-    window.scrollTo(0, 0)
+    window.scrollTo({ top: 0, behavior: "smooth" })
   }
   useEffect(() => {
     const titles: Record<Page, string> = {
@@ -609,7 +937,7 @@ export default function App() {
     const id = window.setTimeout(() => setToast(""), 4500)
     return () => window.clearTimeout(id)
   }, [toast])
-  const modalOpen = uploadOpen || clause !== null || planModal !== null
+  const modalOpen = uploadOpen || clause !== null || planModal !== null || authModal !== null
   useEffect(() => {
     if (!modalOpen) return
     const previous = document.activeElement as HTMLElement
@@ -623,6 +951,7 @@ export default function App() {
         setUploadOpen(false)
         setClause(null)
         setPlanModal(null)
+        setAuthModal(null)
       }
       if (e.key === "Tab" && nodes?.length) {
         const first = nodes[0]
@@ -663,11 +992,19 @@ export default function App() {
   const selectFile = (file?: File) => {
     if (!file) return
     if (!/\.(pdf|docx|jpg|jpeg|png)$/i.test(file.name)) {
-      setUploadError("Please choose a PDF, DOCX, JPG, or PNG document.")
+      setUploadError(
+        lang === "id"
+          ? "Silakan pilih dokumen dengan format PDF, DOCX, JPG, atau PNG."
+          : "Please choose a PDF, DOCX, JPG, or PNG document."
+      )
       return
     }
     if (file.size > 20 * 1024 * 1024) {
-      setUploadError("Your file must be smaller than 20 MB.")
+      setUploadError(
+        lang === "id"
+          ? "Ukuran file harus lebih kecil dari 20 MB."
+          : "Your file must be smaller than 20 MB."
+      )
       return
     }
     setUploadFile(file)
@@ -755,26 +1092,38 @@ export default function App() {
 
     let source = 1
     let answer =
-      "If you resign before 12 January 2028, you need to give 30 days’ written notice. You may also owe compensation equal to one month’s gross salary (Rp12,000,000). Consider discussing this condition with your employer before making a decision."
-    if (/end|expire|duration|berakhir/i.test(text)) {
+      lang === "id"
+        ? "Jika Anda mengundurkan diri sebelum 12 Januari 2028, Anda perlu memberikan pemberitahuan tertulis 30 hari sebelumnya. Anda juga dapat dikenakan ganti rugi sebesar satu bulan gaji kotor (Rp12.000.000). Diskusikan ketentuan ini dengan perusahaan Anda."
+        : "If you resign before 12 January 2028, you need to give 30 days’ written notice. You may also owe compensation equal to one month’s gross salary (Rp12,000,000). Consider discussing this condition with your employer before making a decision."
+    if (/end|expire|duration|berakhir|selesai|jangka/i.test(text)) {
       source = 2
       answer =
-        "The sample agreement runs from 13 January 2027 to 12 January 2028. It automatically renews for another 12 months unless either party gives written notice at least 30 days before expiry."
+        lang === "id"
+          ? "Perjanjian contoh ini berlaku dari 13 Januari 2027 hingga 12 Januari 2028 (12 bulan). Kontrak akan diperpanjang secara otomatis jika tidak ada pemberitahuan tertulis setidaknya 30 hari sebelum masa berlaku habis."
+          : "The sample agreement runs from 13 January 2027 to 12 January 2028. It automatically renews for another 12 months unless either party gives written notice at least 30 days before expiry."
     } else if (/renew|perpanjang/i.test(text)) {
       source = 2
       answer =
-        "Yes. The sample agreement renews automatically for 12 months. To avoid renewal, submit written notice by 12 December 2027—30 days before the contract expires."
-    } else if (/responsib|duties|tugas/i.test(text)) {
+        lang === "id"
+          ? "Ya. Kontrak ini diperpanjang otomatis selama 12 bulan. Untuk menghindari perpanjangan otomatis, kirimkan pemberitahuan tertulis paling lambat 12 Desember 2027—yaitu 30 hari sebelum kontrak berakhir."
+          : "Yes. The sample agreement renews automatically for 12 months. To avoid renewal, submit written notice by 12 December 2027—30 days before the contract expires."
+    } else if (/responsib|duties|tugas|tanggung jawab|peran/i.test(text)) {
       source = 4
       answer =
-        "Your main responsibility is working as a Product Designer, 40 hours per week, reporting to the Head of Design. Any material changes to your role must be agreed in writing."
-    } else if (/pay|salary|gaji/i.test(text)) {
+        lang === "id"
+          ? "Tanggung jawab utama Anda adalah sebagai Product Designer, 40 jam per minggu, melapor kepada Head of Design. Setiap perubahan tugas signifikan harus disepakati secara tertulis."
+          : "Your main responsibility is working as a Product Designer, 40 hours per week, reporting to the Head of Design. Any material changes to your role must be agreed in writing."
+    } else if (/pay|salary|gaji|upah|uang/i.test(text)) {
       source = 0
       answer =
-        "Your gross monthly salary is Rp12,000,000, paid no later than the 25th of each month. Benefits follow the company’s written policies."
-    } else if (!/resign|early|terminat|quit/i.test(text)) {
+        lang === "id"
+          ? "Gaji kotor bulanan Anda adalah Rp12.000.000, dibayarkan paling lambat tanggal 25 setiap bulannya. Tunjangan mengikuti ketentuan tertulis perusahaan."
+          : "Your gross monthly salary is Rp12,000,000, paid no later than the 25th of each month. Benefits follow the company’s written policies."
+    } else if (!/resign|early|terminat|quit|keluar|mundur/i.test(text)) {
       answer =
-        "This prototype can explain the sample agreement’s payment, termination, renewal, and responsibilities clauses. For your question, the relevant starting point is Article 8: either party must give 30 days’ written notice to end the agreement."
+        lang === "id"
+          ? "CLARIQ AI dapat menjelaskan klausul pembayaran, pengakhiran kontrak, perpanjangan otomatis, dan tanggung jawab kerja. Terkait pertanyaan Anda, pasal rujukan utama adalah Pasal 8: masing-masing pihak harus memberikan pemberitahuan tertulis 30 hari."
+          : "This prototype can explain the sample agreement’s payment, termination, renewal, and responsibilities clauses. For your question, the relevant starting point is Article 8: either party must give 30 days’ written notice to end the agreement."
     }
     setMessages((prev) => [
       ...prev,
@@ -787,37 +1136,42 @@ export default function App() {
     page: Page
     count?: string
   }[] = [
-    { label: "Dashboard", icon: "grid", page: "dashboard" },
+    { label: t.nav_dashboard, icon: "grid", page: "dashboard" },
     {
-      label: "My Contracts",
+      label: t.nav_contracts,
       icon: "file",
       page: "contracts",
       count: String(contracts.length),
     },
-    { label: "Compare", icon: "compare", page: "compare" },
-    { label: "Important Dates", icon: "calendar", page: "dates", count: "3" },
+    { label: t.nav_compare, icon: "compare", page: "compare" },
+    { label: t.nav_dates, icon: "calendar", page: "dates", count: "3" },
   ]
-  const filteredContracts = contracts.filter(
-    (c) =>
-      `${c.name} ${c.company} ${c.type}`
-        .toLowerCase()
-        .includes(search.toLowerCase()) &&
-      (filter === "All contracts" ||
-        (filter === "Needs attention"
-          ? c.status === "Needs Attention"
-          : c.status === filter)),
-  )
+  const filteredContracts = contracts.filter((c) => {
+    const displayName = getContractName(c, lang)
+    const displayType = getContractType(c.typeId || c.type, lang)
+    const matchesSearch = `${displayName} ${c.company} ${displayType}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
+    if (!matchesSearch) return false
+    if (filter === "all") return true
+    const st = (c.status || "").toLowerCase()
+    const stId = (c.statusId || "").toLowerCase()
+    if (filter === "attention") return st.includes("attention") || stId.includes("perhatian")
+    if (filter === "review") return st.includes("review") || stId.includes("tinjau")
+    if (filter === "safe") return st.includes("safe") || stId.includes("aman")
+    return true
+  })
   const isLanding = page === "landing"
   const contractTable = (all = false) => (
     <div className="table-scroll">
       <table className="contracts-table">
         <thead>
           <tr>
-            <th>Contract</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Last analyzed</th>
-            <th aria-label="Actions" />
+            <th>{t.table_contract}</th>
+            <th>{t.table_type}</th>
+            <th>{t.table_status}</th>
+            <th>{t.table_last_analyzed}</th>
+            <th aria-label={t.table_actions} />
           </tr>
         </thead>
         <tbody>
@@ -836,23 +1190,23 @@ export default function App() {
                         openContract(c)
                       }}
                     >
-                      {c.name}
+                      {getContractName(c, lang)}
                     </button>
                     <span>{c.company}</span>
                   </div>
                 </div>
               </td>
               <td>
-                <span className="type-label">{c.type}</span>
+                <span className="type-label">{getContractType(c.typeId || c.type, lang)}</span>
               </td>
               <td>
-                <Badge status={c.status} />
+                <Badge status={getContractStatus(c.statusId || c.status, lang)} />
               </td>
-              <td className="date-cell">{c.date}</td>
+              <td className="date-cell">{getContractDate(c.dateId || c.date, lang)}</td>
               <td>
                 <button
                   className="icon-button table-arrow"
-                  aria-label={`Open ${c.name}`}
+                  aria-label={`Open ${getContractName(c, lang)}`}
                   onClick={(e) => {
                     e.stopPropagation()
                     openContract(c)
@@ -868,16 +1222,16 @@ export default function App() {
       {all && !filteredContracts.length && (
         <div className="empty-state">
           <Icon name="search" size={30} />
-          <h3>No contracts found</h3>
-          <p>Try a different search or filter.</p>
+          <h3>{t.table_no_contracts}</h3>
+          <p>{lang === "id" ? "Coba kata kunci pencarian atau filter lain." : "Try a different search or filter."}</p>
           <Button
             variant="secondary"
             onClick={() => {
               setSearch("")
-              setFilter("All contracts")
+              setFilter("all")
             }}
           >
-            Clear filters
+            {t.table_clear_filter}
           </Button>
         </div>
       )}
@@ -906,14 +1260,14 @@ export default function App() {
             <button className="workspace" onClick={() => setProfile(!profile)}>
               <span className="workspace-avatar">P</span>
               <span>
-                <b>Personal workspace</b>
-                <small>{plan} plan</small>
+                <b>{t.nav_personal_workspace}</b>
+                <small>{plan} {t.nav_plan_suffix}</small>
               </span>
               <span className="workspace-chevron">
                 <Icon name="chevron" size={14} />
               </span>
             </button>
-            <div className="nav-label">WORKSPACE</div>
+            <div className="nav-label">{t.nav_workspace}</div>
             <nav className="main-nav" aria-label="Main navigation">
               {navItems.map((item) => (
                 <button
@@ -938,14 +1292,12 @@ export default function App() {
                 <span className="upgrade-icon">
                   <Icon name="spark" size={19} />
                 </span>
-                <h3>A little more clarity.</h3>
+                <h3>{t.nav_upgrade_title}</h3>
                 <p>
-                  More contracts. Deeper insights.
-                  <br />
-                  Meet CLARIQ Plus.
+                  {t.nav_upgrade_desc}
                 </p>
                 <button onClick={() => navigate("pricing")}>
-                  Explore Plus
+                  {t.nav_explore_plans}
                   <Icon name="arrow" size={15} />
                 </button>
               </div>
@@ -954,23 +1306,25 @@ export default function App() {
                 onClick={() => navigate("settings")}
               >
                 <Icon name="settings" size={19} />
-                <span>Settings</span>
+                <span>{t.nav_settings}</span>
               </button>
               <button
                 className="nav-item"
                 onClick={() =>
                   setToast(
-                    "Need a hand? Contact hello@clariq.example. This is a demo support address.",
+                    lang === "id"
+                      ? "Butuh bantuan? Hubungi hello@clariq.example. Ini adalah demo resmi."
+                      : "Need a hand? Contact hello@clariq.example. This is a demo support address."
                   )
                 }
               >
                 <Icon name="help" size={19} />
-                <span>Help & getting started</span>
+                <span>{t.nav_help}</span>
                 <Icon name="external" size={14} />
               </button>
               <div className="sidebar-footer">
                 <span className="tiny-brand">CLARIQ</span>
-                <span>Understand what you sign.</span>
+                <span>{t.nav_footer_tagline}</span>
               </div>
             </div>
           </aside>
@@ -981,17 +1335,29 @@ export default function App() {
           <header className="landing-nav">
             <Logo onClick={() => navigate("landing")} />
             <nav>
-              <a href="#product">Product</a>
-              <a href="#how-it-works">How it works</a>
-              <button onClick={() => navigate("pricing")}>For Business</button>
-              <button onClick={() => navigate("pricing")}>Pricing</button>
+              <a href="#product">{lang === "id" ? "Fitur" : "Product"}</a>
+              <a href="#how-it-works">{lang === "id" ? "Cara Kerja" : "How it works"}</a>
+              <button onClick={() => navigate("pricing")}>{lang === "id" ? "Untuk Bisnis" : "For Business"}</button>
+              <button onClick={() => navigate("pricing")}>{lang === "id" ? "Harga & Paket" : "Pricing"}</button>
             </nav>
-            <div>
-              <Button variant="text" onClick={() => navigate("dashboard")}>
-                Login
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <LanguageSwitcher lang={lang} onChange={setLang} />
+              <Button
+                variant="text"
+                onClick={() => {
+                  setAuthModal("login")
+                  setAuthError("")
+                }}
+              >
+                {lang === "id" ? "Masuk" : "Sign In"}
               </Button>
-              <Button onClick={() => navigate("dashboard")}>
-                Get Started
+              <Button
+                onClick={() => {
+                  setAuthModal("register")
+                  setAuthError("")
+                }}
+              >
+                {lang === "id" ? "Mulai Sekarang" : "Get Started"}
                 <Icon name="arrow" size={16} />
               </Button>
             </div>
@@ -1005,16 +1371,31 @@ export default function App() {
             {mobileNav && (
               <div className="public-mobile-menu">
                 <button onClick={() => navigate("dashboard")}>
-                  Explore product
+                  {lang === "id" ? "Jelajahi Produk" : "Explore product"}
                 </button>
                 <a href="#how-it-works" onClick={() => setMobileNav(false)}>
-                  How it works
+                  {lang === "id" ? "Cara Kerja" : "How it works"}
                 </a>
                 <button onClick={() => navigate("pricing")}>
-                  Pricing & Business
+                  {lang === "id" ? "Harga & Bisnis" : "Pricing & Business"}
                 </button>
-                <button onClick={() => navigate("dashboard")}>
-                  Get started
+                <button
+                  onClick={() => {
+                    setAuthModal("login")
+                    setAuthError("")
+                    setMobileNav(false)
+                  }}
+                >
+                  {lang === "id" ? "Masuk Akun" : "Sign in"}
+                </button>
+                <button
+                  onClick={() => {
+                    setAuthModal("register")
+                    setAuthError("")
+                    setMobileNav(false)
+                  }}
+                >
+                  {lang === "id" ? "Mulai Sekarang" : "Get started"}
                 </button>
               </div>
             )}
@@ -1030,19 +1411,19 @@ export default function App() {
                 <Icon name="menu" />
               </button>
               <span className="breadcrumb">
-                Workspace
+                {t.topbar_workspace}
                 <Icon name="chevron" size={13} />
                 <b>
                   {
                     {
-                      dashboard: "Dashboard",
-                      contracts: "My Contracts",
-                      analysis: "Contract Analysis",
-                      chat: "Ask Your Contract",
-                      compare: "Compare",
-                      dates: "Important Dates",
-                      settings: "Settings",
-                      pricing: "Plans & Pricing",
+                      dashboard: t.breadcrumb_dashboard,
+                      contracts: t.breadcrumb_contracts,
+                      analysis: t.breadcrumb_analysis,
+                      chat: t.breadcrumb_chat,
+                      compare: t.breadcrumb_compare,
+                      dates: t.breadcrumb_dates,
+                      settings: t.breadcrumb_settings,
+                      pricing: t.breadcrumb_pricing,
                       landing: "",
                     }[page]
                   }
@@ -1050,11 +1431,12 @@ export default function App() {
               </span>
             </div>
             <div className="topbar-right">
+              <LanguageSwitcher lang={lang} onChange={setLang} />
               <div className="global-search">
                 <Icon name="search" size={17} />
                 <input
                   aria-label="Search contracts"
-                  placeholder="Search anything..."
+                  placeholder={t.topbar_search_placeholder}
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value)
@@ -1084,15 +1466,15 @@ export default function App() {
                 {notifications && (
                   <div className="popover notifications">
                     <h3>
-                      Your notifications <span>2 new</span>
+                      {t.notifications_title} <span>{t.notifications_unread}</span>
                     </h3>
                     <button onClick={() => navigate("analysis")}>
                       <span className="notification-icon attention">
                         <Icon name="warning" size={19} />
                       </span>
                       <span>
-                        <b>A clause needs your attention</b>
-                        <small>Employment Agreement · Just now</small>
+                        <b>{t.notifications_sample_attention}</b>
+                        <small>{t.notifications_sample_attention_sub}</small>
                       </span>
                     </button>
                     <button onClick={() => navigate("dates")}>
@@ -1100,11 +1482,11 @@ export default function App() {
                         <Icon name="calendar" size={19} />
                       </span>
                       <span>
-                        <b>Your next payment is coming up</b>
-                        <small>25 November · 13 days remaining</small>
+                        <b>{t.notifications_sample_payment}</b>
+                        <small>{t.notifications_sample_payment_sub}</small>
                       </span>
                     </button>
-                    <p>You're all caught up.</p>
+                    <p>{t.notifications_empty}</p>
                   </div>
                 )}
               </div>
@@ -1119,9 +1501,16 @@ export default function App() {
                     setNotifications(false)
                   }}
                 >
-                  <span className="avatar">PA</span>
+                  <span className="avatar">
+                    {name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join("")
+                      .toUpperCase() || "PA"}
+                  </span>
                   <span className="profile-name">
-                    {name.split(" ")[0]} Anindya
+                    {name}
                   </span>
                   <Icon name="chevron" size={14} />
                 </button>
@@ -1131,15 +1520,32 @@ export default function App() {
                     <small>{email}</small>
                     <button onClick={() => navigate("settings")}>
                       <Icon name="settings" size={16} />
-                      Account settings
+                      {t.account_settings}
                     </button>
                     <button onClick={() => navigate("pricing")}>
                       <Icon name="spark" size={16} />
-                      Plans & billing
+                      {t.plans_billing}
                     </button>
+                    {token ? (
+                      <button onClick={handleLogout}>
+                        <Icon name="logout" size={16} />
+                        {t.sign_out}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setProfile(false)
+                          setAuthModal("login")
+                          setAuthError("")
+                        }}
+                      >
+                        <Icon name="lock" size={16} />
+                        {t.sign_in_register}
+                      </button>
+                    )}
                     <button onClick={() => navigate("landing")}>
-                      <Icon name="logout" size={16} />
-                      Back to website
+                      <Icon name="external" size={16} />
+                      {t.back_to_website}
                     </button>
                   </div>
                 )}
@@ -1147,95 +1553,97 @@ export default function App() {
             </div>
           </header>
         )}
-        <main className={isLanding ? "landing-content" : "page-content"}>
+        <main key={page} className={isLanding ? "landing-content" : "page-content"}>
           {page === "dashboard" && (
             <>
               <div className="page-heading">
                 <div>
                   <div className="greeting-eyebrow">
-                    YOUR CLARITY STARTS HERE
+                    {t.greeting_eyebrow}
                   </div>
                   <h1>
-                    Good morning, {name.split(" ")[0]}
+                    {t.greeting_morning} {name.split(" ")[0]}
                     <span className="greeting-dot">.</span>
                   </h1>
                   <p>
-                    Here’s an overview of your contracts. Let’s keep things
-                    clear.
+                    {t.greeting_sub}
                   </p>
                 </div>
                 <Button icon="plus" onClick={openUpload}>
-                  Analyze Contract
+                  {t.new_contract_btn}
                 </Button>
               </div>
               <section className="welcome-card">
                 <div className="welcome-copy">
                   <span className="eyebrow">
                     <span className="blue-dot" />
-                    LESS COMPLEXITY. MORE CONFIDENCE.
+                    {t.welcome_eyebrow}
                   </span>
                   <h2>
-                    Your contracts.
-                    <br />A little clearer.
+                    {t.welcome_title}
                   </h2>
                   <p>
-                    From the fine print to the big picture, understand
-                    <br className="desktop-break" /> what matters—before you put
-                    pen to paper.
+                    {t.welcome_desc}
                   </p>
                   <Button variant="white" onClick={openUpload}>
-                    Analyze a contract
+                    {t.welcome_btn}
                     <Icon name="arrow" size={17} />
                   </Button>
                   <div className="welcome-trust">
                     <Icon name="lock" size={12} />
-                    Private by design. Clear by default.
+                    {t.welcome_trust}
                   </div>
                 </div>
-                <DocumentArt />
-                <div className="welcome-corner">UNDERSTAND WHAT YOU SIGN.</div>
+                <DocumentArt lang={lang} />
+                <div className="welcome-corner">{t.welcome_corner}</div>
               </section>
               <div className="stats-grid">
                 {[
                   {
-                    label: "Active Contracts",
+                    label: t.stat_analyzed,
                     value: String(contracts.length),
                     icon: "file" as IconName,
                     color: "blue",
-                    note: "+2 this month",
+                    note: t.stat_active_note,
                     noteClass: "positive",
                     page: "contracts" as Page,
+                    filterKey: "all",
                   },
                   {
-                    label: "Need Attention",
+                    label: t.stat_needs_attention,
                     value: String(
                       contracts.filter(
-                        (contract) => contract.status === "Needs Attention",
+                        (contract) =>
+                          contract.status === "Needs Attention" ||
+                          contract.statusId === "Perlu Perhatian",
                       ).length,
                     ),
                     icon: "shield" as IconName,
                     color: "coral",
-                    note: "Let’s take a closer look",
+                    note: t.stat_attention_note,
                     noteClass: "",
                     page: "contracts" as Page,
+                    filterKey: "attention",
                   },
                   {
-                    label: "Upcoming Deadlines",
+                    label: t.stat_upcoming_dates,
                     value: "3",
                     icon: "calendar" as IconName,
                     color: "amber",
-                    note: "In the next 30 days",
+                    note: t.stat_dates_note,
                     noteClass: "",
                     page: "dates" as Page,
+                    filterKey: "all",
                   },
                   {
-                    label: "Analyzed This Month",
+                    label: t.stat_this_month,
                     value: String(contracts.length),
                     icon: "spark" as IconName,
                     color: "mint",
-                    note: "A little more informed",
+                    note: t.stat_month_note,
                     noteClass: "",
                     page: "contracts" as Page,
+                    filterKey: "all",
                   },
                 ].map((stat) => (
                   <button
@@ -1243,11 +1651,7 @@ export default function App() {
                     key={stat.label}
                     onClick={() => {
                       navigate(stat.page)
-                      setFilter(
-                        stat.label === "Need Attention"
-                          ? "Needs attention"
-                          : "All contracts",
-                      )
+                      setFilter(stat.filterKey)
                     }}
                   >
                     <div className="stat-top">
@@ -1259,7 +1663,7 @@ export default function App() {
                     <strong>
                       {stat.value}
                       <span className="stat-mini">
-                        {stat.label === "Active Contracts" && (
+                        {stat.filterKey === "all" && (
                           <svg width="73" height="26" viewBox="0 0 73 26">
                             <path
                               d="M1 24 10 20 18 22 26 14 35 17 44 10 53 12 62 5 72 2"
@@ -1282,28 +1686,28 @@ export default function App() {
               <div className="dashboard-columns">
                 <section className="surface recent-contracts">
                   <SectionTitle
-                    title="Recent contracts"
-                    subtitle="Your documents, understood."
+                    title={t.recent_contracts_title}
+                    subtitle={t.recent_contracts_sub}
                   >
                     <button
                       className="text-link"
                       onClick={() => {
                         navigate("contracts")
-                        setFilter("All contracts")
+                        setFilter("all")
                       }}
                     >
-                      View all
+                      {t.recent_contracts_all}
                       <Icon name="arrow" size={15} />
                     </button>
                   </SectionTitle>
                   {contractTable()}
                 </section>
                 <section className="surface dates-widget">
-                  <SectionTitle title="On the horizon">
+                  <SectionTitle title={t.horizon_title}>
                     <span className="count-tag">3</span>
                   </SectionTitle>
                   <p className="widget-subtitle">
-                    A heads-up for what’s coming.
+                    {t.horizon_sub}
                   </p>
                   <div className="mini-dates">
                     {dateItems.slice(0, 3).map((item, i) => (
@@ -1313,18 +1717,18 @@ export default function App() {
                         onClick={() => navigate("dates")}
                       >
                         <span className={`date-square ${item.kind}`}>
-                          <small>{item.month}</small>
+                          <small>{lang === "id" && item.month === "DEC" ? "DES" : item.month}</small>
                           <b>{item.day}</b>
                         </span>
                         <span className="mini-date-text">
-                          <b>{item.title}</b>
-                          <small>{item.contract}</small>
+                          <b>{lang === "id" ? (item.titleId || item.title) : item.title}</b>
+                          <small>{lang === "id" ? (item.contractId || item.contract) : item.contract}</small>
                           <span
                             className={`days-left ${
                               i === 1 ? "amber-text" : ""
                             }`}
                           >
-                            {item.tag}
+                            {lang === "id" ? (item.tagId || item.tag) : item.tag}
                           </span>
                         </span>
                       </button>
@@ -1334,7 +1738,7 @@ export default function App() {
                     className="calendar-link"
                     onClick={() => navigate("dates")}
                   >
-                    View all important dates
+                    {t.horizon_all}
                     <Icon name="arrow" size={15} />
                   </button>
                 </section>
@@ -1344,30 +1748,32 @@ export default function App() {
                   <Icon name="upload" size={25} />
                 </div>
                 <div>
-                  <h3>Have a new contract?</h3>
+                  <h3>{t.new_contract_title}</h3>
                   <p>
-                    Upload it. We’ll help you make sense of the important parts.
+                    {t.new_contract_desc}
                   </p>
                 </div>
                 <Button variant="secondary" icon="plus" onClick={openUpload}>
-                  Analyze Contract
+                  {t.new_contract_btn}
                 </Button>
                 <div className="banner-decoration" />
               </section>
               <div className="trust-footer">
                 <span>
-                  <Icon name="shield" size={15} />A little clarity goes a long
-                  way.
+                  <Icon name="shield" size={15} />
+                  {t.trust_footer_heading}
                 </span>
-                <p>AI-assisted document understanding. Not legal advice.</p>
+                <p>{t.trust_footer_desc}</p>
                 <button
                   onClick={() =>
                     setToast(
-                      "CLARIQ helps explain documents. Consult a qualified legal professional for advice specific to your situation.",
+                      lang === "id"
+                        ? "CLARIQ membantu menjelaskan dokumen. Konsultasikan dengan penasihat hukum profesional untuk kebutuhan kasus khusus Anda."
+                        : "CLARIQ helps explain documents. Consult a qualified legal professional for advice specific to your situation."
                     )
                   }
                 >
-                  Learn more
+                  {t.trust_footer_learn}
                   <Icon name="external" size={12} />
                 </button>
               </div>
@@ -1378,15 +1784,15 @@ export default function App() {
               <div className="page-heading">
                 <div>
                   <span className="greeting-eyebrow">
-                    YOUR DOCUMENT LIBRARY
+                    {t.library_eyebrow}
                   </span>
                   <h1>
-                    My Contracts<span className="greeting-dot">.</span>
+                    {t.library_title}<span className="greeting-dot">.</span>
                   </h1>
-                  <p>All your agreements. One clear picture.</p>
+                  <p>{t.library_sub}</p>
                 </div>
                 <Button icon="plus" onClick={openUpload}>
-                  Analyze Contract
+                  {t.new_contract_btn}
                 </Button>
               </div>
               <div className="library-summary">
@@ -1394,31 +1800,34 @@ export default function App() {
                   <Icon name="file" size={23} />
                 </span>
                 <div>
-                  <b>{contracts.length} documents in your workspace</b>
-                  <p>Organized, analyzed, and always within reach.</p>
+                  <b>{contracts.length} {t.library_summary_title}</b>
+                  <p>{t.library_summary_sub}</p>
                 </div>
-                <Badge status="All analyses complete" />
+                <Badge status={t.library_badge_complete} />
               </div>
               <section className="surface">
                 <div className="table-toolbar">
                   <div className="filter-tabs">
-                    {["All contracts", "Safe", "Review", "Needs attention"].map(
-                      (item) => (
-                        <button
-                          key={item}
-                          className={filter === item ? "active" : ""}
-                          onClick={() => setFilter(item)}
-                        >
-                          {item}
-                        </button>
-                      ),
-                    )}
+                    {[
+                      { key: "all", label: t.filter_all },
+                      { key: "safe", label: t.filter_safe },
+                      { key: "review", label: t.filter_review },
+                      { key: "attention", label: t.filter_attention },
+                    ].map((item) => (
+                      <button
+                        key={item.key}
+                        className={filter === item.key ? "active" : ""}
+                        onClick={() => setFilter(item.key)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
                   </div>
                   <div className="local-search">
                     <Icon name="search" size={17} />
                     <input
-                      placeholder="Find a contract..."
-                      aria-label="Find a contract"
+                      placeholder={t.library_search_placeholder}
+                      aria-label={t.library_search_placeholder}
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                     />
@@ -1426,14 +1835,13 @@ export default function App() {
                 </div>
                 {contractTable(true)}
                 <div className="table-footer">
-                  Showing {filteredContracts.length} of {contracts.length}{" "}
-                  contracts<span>Sample workspace</span>
+                  {t.table_showing} {filteredContracts.length} {t.table_of} {contracts.length}{" "}
+                  {t.table_contracts_suffix}<span>{t.table_sample_workspace}</span>
                 </div>
               </section>
               <div className="legal-note">
                 <Icon name="shield" size={16} />
-                Your documents stay in this demo session. No files are sent to
-                an AI service.
+                {t.library_demo_note}
               </div>
             </>
           )}
@@ -1444,22 +1852,22 @@ export default function App() {
                 onClick={() => navigate("contracts")}
               >
                 <Icon name="arrow" size={15} />
-                Back to My Contracts
+                {t.analysis_back}
               </button>
               <div className="page-heading analysis-heading">
                 <div>
-                  <h1>{selected.name}</h1>
+                  <h1>{getContractName(selected, lang)}</h1>
                   <p>{selected.company}</p>
                   <div className="document-meta">
                     <span>
                       <Icon name="file" size={14} />
-                      {selected.type} contract
+                      {lang === "id" ? `Kontrak ${getContractType(selected.typeId || selected.type, "id")}` : `${getContractType(selected.typeId || selected.type, "en")} contract`}
                     </span>
                     <span>
                       <Icon name="calendar" size={14} />
-                      Uploaded {selected.date}
+                      {lang === "id" ? "Diunggah" : "Uploaded"} {getContractDate(selected.dateId || selected.date, lang)}
                     </span>
-                    <Badge status="Analysis complete" />
+                    <Badge status={lang === "id" ? "Analisis selesai" : "Analysis complete"} />
                   </div>
                 </div>
                 <Button
@@ -1469,15 +1877,13 @@ export default function App() {
                   }}
                   icon="chat"
                 >
-                  Ask your contract
+                  {t.analysis_ask_btn}
                 </Button>
               </div>
               <div className="sample-note">
                 <Icon name="spark" size={16} />
                 <span>
-                  <b>Sample AI analysis</b> — These insights illustrate CLARIQ’s
-                  experience. They are not generated from your uploaded
-                  document.
+                  {t.analysis_sample_note}
                 </span>
               </div>
               <section className="summary-card">
@@ -1486,21 +1892,31 @@ export default function App() {
                 </div>
                 <div>
                   <div className="summary-heading">
-                    <h2>AI Summary</h2>
-                    <span>THE BIG PICTURE</span>
+                    <h2>{t.summary_heading}</h2>
+                    <span>{t.summary_tag}</span>
                   </div>
                   <p>
-                    {selected.id === 1 || selected.id > 4
-                      ? "This is a 12-month employment agreement for a Product Designer role at PT Example Indonesia. It outlines a monthly salary of Rp12,000,000, a 40-hour work week, and a 30-day notice period. Most terms are standard, but early termination penalties and automatic renewal deserve a closer look."
-                      : selected.id === 2
-                        ? "This freelance agreement with Studio XYZ covers a design project at Rp8,000,000 per month. Payment is due on the 25th. Review the automatic renewal clause and give written notice before 30 November 2027 if you do not wish to continue."
-                        : selected.id === 3
-                          ? "This vendor agreement with Kopi Kita outlines a 12-month supply arrangement, monthly payments, and clearly defined delivery responsibilities. The sample terms are balanced, with no high-attention clauses identified."
-                          : "This apartment lease at Bumi Residence covers a 12-month rental term. Rent is paid monthly, a one-month security deposit is required, and both parties must give 30 days’ notice before termination."}
+                    {lang === "id" ? (
+                      selected.id === 1 || selected.id > 4
+                        ? "Ini adalah perjanjian kerja 12 bulan untuk peran Product Designer di PT Example Indonesia. Dokumen ini menetapkan gaji kotor bulanan Rp12.000.000, 40 jam kerja per minggu, dan masa pemberitahuan resign 30 hari. Sebagian besar ketentuan merupakan standar industri, namun klausul denda pengunduran diri dini dan perpanjangan otomatis layak dicermati lebih mendalam."
+                        : selected.id === 2
+                          ? "Perjanjian freelance ini bersama Studio XYZ mencakup proyek desain seharga Rp8.000.000 per bulan. Pembayaran jatuh tempo setiap tanggal 25. Periksa klausul perpanjangan otomatis dan berikan pemberitahuan tertulis sebelum 30 November 2027 jika tidak ingin memperpanjang."
+                          : selected.id === 3
+                            ? "Perjanjian vendor dengan Kopi Kita ini mencakup pasokan selama 12 bulan, termin pembayaran bulanan, dan tanggung jawab pengiriman barang yang jelas. Tidak ditemukan klausul berisiko tinggi."
+                            : "Perjanjian sewa apartemen di Bumi Residence mencakup masa sewa 12 bulan dengan uang jaminan (deposit) satu bulan sewa. Masa pemberitahuan pengakhiran sewa adalah 30 hari."
+                    ) : (
+                      selected.id === 1 || selected.id > 4
+                        ? "This is a 12-month employment agreement for a Product Designer role at PT Example Indonesia. It outlines a monthly salary of Rp12,000,000, a 40-hour work week, and a 30-day notice period. Most terms are standard, but early termination penalties and automatic renewal deserve a closer look."
+                        : selected.id === 2
+                          ? "This freelance agreement with Studio XYZ covers a design project at Rp8,000,000 per month. Payment is due on the 25th. Review the automatic renewal clause and give written notice before 30 November 2027 if you do not wish to continue."
+                          : selected.id === 3
+                            ? "This vendor agreement with Kopi Kita outlines a 12-month supply arrangement, monthly payments, and clearly defined delivery responsibilities. The sample terms are balanced, with no high-attention clauses identified."
+                            : "This apartment lease at Bumi Residence covers a 12-month rental term. Rent is paid monthly, a one-month security deposit is required, and both parties must give 30 days’ notice before termination."
+                    )}
                   </p>
                   <span className="source-caption">
                     <Icon name="file" size={13} />
-                    Based on your agreement · 12 clauses reviewed
+                    {t.summary_based_on}
                   </span>
                 </div>
               </section>
@@ -1508,27 +1924,27 @@ export default function App() {
                 {[
                   {
                     icon: "calendar" as IconName,
-                    label: "Contract Duration",
-                    value: "12 months",
+                    label: t.insight_duration,
+                    value: lang === "id" ? "12 bulan" : "12 months",
                     sub: "13 Jan 2027 – 12 Jan 2028",
                   },
                   {
                     icon: "file" as IconName,
-                    label: "Payment",
-                    value: "Rp12,000,000",
-                    sub: "Monthly · Paid by the 25th",
+                    label: t.insight_payment,
+                    value: "Rp12.000.000",
+                    sub: lang === "id" ? "Bulanan · Maks tgl 25" : "Monthly · Paid by the 25th",
                   },
                   {
                     icon: "clock" as IconName,
-                    label: "Notice Period",
-                    value: "30 days",
-                    sub: "Written notice required",
+                    label: t.insight_notice,
+                    value: lang === "id" ? "30 hari" : "30 days",
+                    sub: lang === "id" ? "Pemberitahuan tertulis" : "Written notice required",
                   },
                   {
                     icon: "calendar" as IconName,
-                    label: "Important Dates",
-                    value: "12 Dec 2027",
-                    sub: "Next renewal deadline",
+                    label: t.insight_renewal,
+                    value: lang === "id" ? "12 Des 2027" : "12 Dec 2027",
+                    sub: lang === "id" ? "Batas perpanjangan kontrak" : "Next renewal deadline",
                   },
                 ].map((item) => (
                   <div className="surface insight-card" key={item.label}>
@@ -1543,10 +1959,10 @@ export default function App() {
               </div>
               <section className="surface risk-section">
                 <SectionTitle
-                  title="Risk Analysis"
-                  subtitle="Know what’s standard. See what deserves a second look."
+                  title={t.risk_title}
+                  subtitle={t.risk_sub}
                 >
-                  <span className="muted-label">12 clauses analyzed</span>
+                  <span className="muted-label">{t.risk_clauses_count}</span>
                 </SectionTitle>
                 <div className="risk-bar">
                   <span className="risk-safe" />
@@ -1556,22 +1972,22 @@ export default function App() {
                 <div className="risk-legend">
                   <span>
                     <i className="mint-bg" />
-                    <b>8</b> Safe Clauses
+                    <b>8</b> {t.risk_safe_label}
                   </span>
                   <span>
                     <i className="amber-bg" />
-                    <b>3</b> Clauses to Review
+                    <b>3</b> {t.risk_review_label}
                   </span>
                   <span>
                     <i className="coral-bg" />
-                    <b>1</b> High Attention Clause
+                    <b>1</b> {t.risk_attention_label}
                   </span>
                 </div>
               </section>
               <section className="surface clauses-section">
                 <SectionTitle
-                  title="Understand your clauses"
-                  subtitle="Plain-language explanations, with the source always close by."
+                  title={t.clauses_heading}
+                  subtitle={t.clauses_sub}
                 />
                 {activeClauses.map((item, i) => (
                   <button
@@ -1581,18 +1997,18 @@ export default function App() {
                   >
                     <span
                       className={`clause-icon ${
-                        item.status === "Needs Attention"
+                        /attention|perhatian/i.test(item.status)
                           ? "coral"
-                          : item.status === "Review"
+                          : /review|tinjau/i.test(item.status)
                             ? "amber"
                             : "mint"
                       }`}
                     >
                       <Icon
                         name={
-                          item.status === "Needs Attention"
+                          /attention|perhatian/i.test(item.status)
                             ? "warning"
-                            : item.status === "Review"
+                            : /review|tinjau/i.test(item.status)
                               ? "search"
                               : "check"
                         }
@@ -1600,19 +2016,18 @@ export default function App() {
                       />
                     </span>
                     <span className="clause-copy">
-                      <b>{item.title}</b>
-                      <span>{item.text}</span>
-                      <small>{item.source}</small>
+                      <b>{lang === "id" ? (item.titleId || item.title) : item.title}</b>
+                      <span>{lang === "id" ? (item.textId || item.text) : item.text}</span>
+                      <small>{lang === "id" ? (item.sourceId || item.source) : item.source}</small>
                     </span>
-                    <Badge status={item.status} />
+                    <Badge status={getContractStatus(item.statusId || item.status, lang)} />
                     <Icon name="chevron" size={18} />
                   </button>
                 ))}
               </section>
               <div className="legal-note">
                 <Icon name="shield" size={16} />
-                CLARIQ explains your document. It does not replace professional
-                legal advice.
+                {t.clause_legal_disclaimer}
               </div>
             </>
           )}
@@ -1623,24 +2038,24 @@ export default function App() {
                 onClick={() => navigate("analysis")}
               >
                 <Icon name="arrow" size={15} />
-                Back to analysis
+                {t.chat_back}
               </button>
               <div className="page-heading">
                 <div>
                   <span className="greeting-eyebrow">
-                    A CONVERSATION, NOT A COMPLICATION
+                    {t.chat_eyebrow}
                   </span>
                   <h1>
-                    Ask your contract<span className="greeting-dot">.</span>
+                    {t.chat_title}<span className="greeting-dot">.</span>
                   </h1>
-                  <p>Ask questions about the document you uploaded.</p>
+                  <p>{t.chat_sub}</p>
                 </div>
                 <Button
                   variant="secondary"
                   icon="file"
                   onClick={() => navigate("analysis")}
                 >
-                  View analysis
+                  {t.chat_view_analysis}
                 </Button>
               </div>
               <section className="surface chat-surface">
@@ -1649,12 +2064,12 @@ export default function App() {
                     <Icon name="file" size={18} />
                   </span>
                   <div>
-                    <b>{selected.name}</b>
-                    <span>Sample agreement · 12 clauses</span>
+                    <b>{lang === "id" ? (selected.nameId || selected.name) : selected.name}</b>
+                    <span>{lang === "id" ? "Dokumen Perjanjian · 12 klausul" : "Sample agreement · 12 clauses"}</span>
                   </div>
                   <span className="chat-ready">
                     <span />
-                    Ready to help
+                    {t.chat_ready}
                   </span>
                 </div>
                 <div className="chat-messages">
@@ -1663,21 +2078,18 @@ export default function App() {
                       <div className="chat-brand-icon">
                         <Icon name="spark" size={29} />
                       </div>
-                      <h2>
-                        A little question.
-                        <br />A lot more clarity.
+                      <h2 style={{ whiteSpace: "pre-line" }}>
+                        {t.chat_empty_title}
                       </h2>
-                      <p>
-                        The fine print doesn’t have to be confusing.
-                        <br />
-                        What would you like to understand?
+                      <p style={{ whiteSpace: "pre-line" }}>
+                        {t.chat_empty_desc}
                       </p>
                       <div className="suggested-questions">
                         {[
-                          "What happens if I resign early?",
-                          "When does this contract end?",
-                          "Is there an automatic renewal?",
-                          "What are my main responsibilities?",
+                          t.chat_suggested_1,
+                          t.chat_suggested_2,
+                          t.chat_suggested_3,
+                          t.chat_suggested_4,
                         ].map((q) => (
                           <button onClick={() => ask(q)} key={q}>
                             {q}
@@ -1699,28 +2111,26 @@ export default function App() {
                           {m.role === "assistant" ? (
                             <Icon name="spark" size={19} />
                           ) : (
-                            "PA"
+                            name.slice(0, 2).toUpperCase() || "PA"
                           )}
                         </span>
                         <div>
                           <span className="message-author">
                             {m.role === "assistant"
-                              ? "CLARIQ"
+                              ? "CLARIQ AI"
                               : name.split(" ")[0]}
                             {m.role === "assistant" && (
-                              <small>AI · SAMPLE</small>
+                              <small>{lang === "id" ? "AI · SIMULASI" : "AI · SAMPLE"}</small>
                             )}
                           </span>
                           <p>{m.text}</p>
                           {m.source !== undefined && (
                             <div className="chat-citation">
                               <small>
-                                Based on{" "}
-                                {(
-                                  activeClauses[m.source] ||
-                                  clauses[m.source] ||
-                                  clauses[0]
-                                ).source}
+                                {t.chat_citation_based}{" "}
+                                {lang === "id"
+                                  ? (activeClauses[m.source] || clauses[m.source] || clauses[0]).sourceId || (activeClauses[m.source] || clauses[m.source] || clauses[0]).source
+                                  : (activeClauses[m.source] || clauses[m.source] || clauses[0]).source}
                               </small>
                               <button
                                 onClick={() => {
@@ -1729,7 +2139,7 @@ export default function App() {
                                 }}
                               >
                                 <Icon name="file" size={13} />
-                                View source
+                                {t.chat_citation_view}
                                 <Icon name="external" size={12} />
                               </button>
                             </div>
@@ -1752,7 +2162,7 @@ export default function App() {
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                       aria-label="Question about your contract"
-                      placeholder="Ask anything about your contract..."
+                      placeholder={t.chat_input_placeholder}
                     />
                     <button
                       type="submit"
@@ -1765,8 +2175,7 @@ export default function App() {
                   </div>
                   <p>
                     <Icon name="shield" size={12} />
-                    Sample AI answers. Always verify the source. Not legal
-                    advice.
+                    {t.chat_disclaimer}
                   </p>
                 </form>
               </section>
@@ -1776,13 +2185,11 @@ export default function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <span className="greeting-eyebrow">SEE THE DIFFERENCE</span>
+                  <span className="greeting-eyebrow">{t.compare_eyebrow}</span>
                   <h1>
-                    Compare Contracts<span className="greeting-dot">.</span>
+                    {t.compare_title}<span className="greeting-dot">.</span>
                   </h1>
-                  <p>
-                    Two documents. Side by side. Nothing important overlooked.
-                  </p>
+                  <p>{t.compare_sub}</p>
                 </div>
                 <Button
                   icon="compare"
@@ -1790,26 +2197,34 @@ export default function App() {
                   onClick={() => {
                     setCompared(true)
                     setToast(
-                      "Sample comparison ready. File contents are not processed in this prototype.",
+                      lang === "id"
+                        ? "Perbandingan percontohan siap ditinjau. Isi file tidak dikirim ke pihak luar."
+                        : "Sample comparison ready. File contents are not processed in this prototype."
                     )
                   }}
                 >
-                  Compare contracts
+                  {t.compare_btn}
                 </Button>
               </div>
               <div className="compare-upload-grid">
-                {["Contract A", "Contract B"].map((label, i) => (
+                {[t.compare_doc_a, t.compare_doc_b].map((label, i) => (
                   <label className="surface compare-upload" key={label}>
                     <span className="compare-label">
                       {label}
-                      <span>{i ? "REVISED VERSION" : "ORIGINAL VERSION"}</span>
+                      <span>{i ? t.compare_revised_tag : t.compare_orig_tag}</span>
                     </span>
                     <span className={`file-icon ${i ? "mint" : "blue"}`}>
                       <Icon name="file" size={23} />
                     </span>
-                    <b>{compareFiles[i] || "Choose a document"}</b>
+                    <b>
+                      {compareFiles[i] === "Employment Agreement.pdf" && lang === "id"
+                        ? "Perjanjian Kerja.pdf"
+                        : compareFiles[i] === "Employment Agreement — revised.pdf" && lang === "id"
+                          ? "Perjanjian Kerja — revisi.pdf"
+                          : compareFiles[i] || t.compare_choose_doc}
+                    </b>
                     <span className="text-link">
-                      {compareFiles[i] ? "Replace document" : "Upload document"}
+                      {compareFiles[i] ? t.compare_replace_doc : t.compare_upload_doc}
                       <Icon name="upload" size={14} />
                     </span>
                     <input
@@ -1820,7 +2235,7 @@ export default function App() {
                         const f = e.target.files?.[0]
                         if (f) {
                           if (f.size > 20 * 1024 * 1024) {
-                            setToast("Please select a file smaller than 20 MB.")
+                            setToast(lang === "id" ? "Pilih file di bawah 20 MB." : "Please select a file smaller than 20 MB.")
                             return
                           }
                           const next = [...compareFiles]
@@ -1837,56 +2252,55 @@ export default function App() {
                 <>
                   <div className="sample-note">
                     <Icon name="spark" size={16} />
-                    Sample comparison — Differences below are illustrative, not
-                    extracted from selected files.
+                    {t.compare_sample_note}
                   </div>
                   <section className="surface compare-table-wrap">
-                    <SectionTitle title="The details, side by side">
-                      <Badge status="3 differences to review" />
+                    <SectionTitle title={t.compare_details_title}>
+                      <Badge status={t.compare_diff_badge} />
                     </SectionTitle>
                     <div className="table-scroll">
                       <table className="compare-table">
                         <thead>
                           <tr>
-                            <th>Category</th>
+                            <th>{t.compare_category}</th>
                             <th>
                               <span className="comparison-dot blue-bg" />
-                              Contract A
+                              {t.compare_doc_a}
                             </th>
                             <th>
                               <span className="comparison-dot mint-bg" />
-                              Contract B
+                              {t.compare_doc_b}
                             </th>
                           </tr>
                         </thead>
                         <tbody>
                           {[
-                            ["Duration", "12 months", "12 months"],
+                            [lang === "id" ? "Durasi" : "Duration", lang === "id" ? "12 bulan" : "12 months", lang === "id" ? "12 bulan" : "12 months"],
                             [
-                              "Payment",
-                              "Rp12,000,000 / month",
-                              "Rp14,000,000 / month",
+                              lang === "id" ? "Gaji / Kompensasi" : "Payment",
+                              lang === "id" ? "Rp12.000.000 / bulan" : "Rp12,000,000 / month",
+                              lang === "id" ? "Rp14.000.000 / bulan" : "Rp14,000,000 / month",
                             ],
-                            ["Notice Period", "30 days", "60 days"],
+                            [lang === "id" ? "Masa Pemberitahuan" : "Notice Period", lang === "id" ? "30 hari" : "30 days", lang === "id" ? "60 hari" : "60 days"],
                             [
-                              "Renewal",
-                              "Automatic · 12 months",
-                              "Automatic · 12 months",
-                            ],
-                            [
-                              "Termination",
-                              "30 days’ written notice",
-                              "60 days’ written notice",
+                              lang === "id" ? "Perpanjangan" : "Renewal",
+                              lang === "id" ? "Otomatis · 12 bulan" : "Automatic · 12 months",
+                              lang === "id" ? "Otomatis · 12 bulan" : "Automatic · 12 months",
                             ],
                             [
-                              "Penalty",
-                              "One month’s gross salary",
-                              "No early termination penalty",
+                              lang === "id" ? "Pengakhiran Kontrak" : "Termination",
+                              lang === "id" ? "Pemberitahuan tertulis 30 hari" : "30 days’ written notice",
+                              lang === "id" ? "Pemberitahuan tertulis 60 hari" : "60 days’ written notice",
                             ],
                             [
-                              "Responsibilities",
-                              "Product Designer · 40 hrs/week",
-                              "Product Designer · 40 hrs/week",
+                              lang === "id" ? "Denda Resign Dini" : "Penalty",
+                              lang === "id" ? "1 bulan gaji kotor" : "One month’s gross salary",
+                              lang === "id" ? "Tanpa denda pinalti" : "No early termination penalty",
+                            ],
+                            [
+                              lang === "id" ? "Tanggung Jawab" : "Responsibilities",
+                              lang === "id" ? "Product Designer · 40 jam/minggu" : "Product Designer · 40 hrs/week",
+                              lang === "id" ? "Product Designer · 40 jam/minggu" : "Product Designer · 40 hrs/week",
                             ],
                           ].map(([label, a, b]) => (
                             <tr
@@ -1900,7 +2314,7 @@ export default function App() {
                               <td>{a}</td>
                               <td>
                                 {b}
-                                {label === "Penalty" && (
+                                {(label.includes("Penalty") || label.includes("Denda")) && (
                                   <Icon name="check" size={16} />
                                 )}
                               </td>
@@ -1911,27 +2325,27 @@ export default function App() {
                     </div>
                   </section>
                   <SectionTitle
-                    title="Key Differences"
-                    subtitle="A quick look at what changed—and why it matters."
+                    title={t.compare_key_diff}
+                    subtitle={t.compare_key_sub}
                   />
                   <div className="key-differences">
                     {[
                       {
                         icon: "file" as IconName,
-                        title: "A higher monthly salary",
-                        text: "Contract B offers Rp2,000,000 more per month—a 16.7% increase.",
+                        title: t.compare_diff_1_title,
+                        text: t.compare_diff_1_text,
                         color: "mint",
                       },
                       {
                         icon: "clock" as IconName,
-                        title: "More time to give notice",
-                        text: "The notice period doubles from 30 to 60 days. Plan ahead if you intend to leave.",
+                        title: t.compare_diff_2_title,
+                        text: t.compare_diff_2_text,
                         color: "amber",
                       },
                       {
                         icon: "shield" as IconName,
-                        title: "No early termination penalty",
-                        text: "Contract B removes the one-month salary penalty, giving you more flexibility.",
+                        title: t.compare_diff_3_title,
+                        text: t.compare_diff_3_text,
                         color: "blue",
                       },
                     ].map((item) => (
@@ -1948,16 +2362,15 @@ export default function App() {
               ) : (
                 <div className="surface empty-state">
                   <Icon name="compare" size={34} />
-                  <h3>Ready for a clearer comparison?</h3>
+                  <h3>{t.compare_empty_title}</h3>
                   <p>
-                    Select “Compare contracts” to view the sample differences.
+                    {t.compare_empty_sub}
                   </p>
                 </div>
               )}
               <div className="legal-note">
                 <Icon name="shield" size={16} />
-                Compare the details. For legal decisions, consult a qualified
-                professional.
+                {t.compare_legal_note}
               </div>
             </>
           )}
@@ -1966,45 +2379,45 @@ export default function App() {
               <div className="page-heading">
                 <div>
                   <span className="greeting-eyebrow">
-                    A LITTLE AHEAD OF THE CURVE
+                    {t.dates_eyebrow}
                   </span>
                   <h1>
-                    Important Dates<span className="greeting-dot">.</span>
+                    {t.dates_title}<span className="greeting-dot">.</span>
                   </h1>
-                  <p>No surprises. Just the dates that matter.</p>
+                  <p>{t.dates_sub}</p>
                 </div>
                 <span className="demo-today">
                   <Icon name="calendar" size={16} />
-                  Demo date: 12 Nov 2027
+                  {t.dates_demo_badge}
                 </span>
               </div>
               <div className="dates-page-grid">
                 <section className="surface timeline-card">
                   <SectionTitle
-                    title="Your contract timeline"
-                    subtitle="Upcoming milestones across your agreements."
+                    title={t.dates_timeline_title}
+                    subtitle={t.dates_timeline_sub}
                   />
                   <div className="timeline-list">
                     {dateItems.map((item, i) => (
                       <div className="timeline-item" key={item.title}>
                         <span className={`date-square ${item.kind}`}>
-                          <small>{item.month}</small>
+                          <small>{lang === "id" && item.month === "DEC" ? "DES" : item.month}</small>
                           <b>{item.day}</b>
                         </span>
                         <div className="timeline-copy">
-                          <h3>{item.title}</h3>
+                          <h3>{lang === "id" ? (item.titleId || item.title) : item.title}</h3>
                           <button
                             onClick={() =>
                               openContract(initialContracts[i === 1 ? 1 : 0])
                             }
                           >
-                            {item.contract}
+                            {lang === "id" ? (item.contractId || item.contract) : item.contract}
                             <Icon name="external" size={12} />
                           </button>
-                          <span>{item.date}</span>
+                          <span>{lang === "id" ? (item.dateId || item.date) : item.date}</span>
                         </div>
                         <div className="timeline-actions">
-                          <Badge status={item.tag} />
+                          <Badge status={lang === "id" ? (item.tagId || item.tag) : item.tag} />
                           <button
                             className={`reminder-button ${
                               reminders.includes(i) ? "enabled" : ""
@@ -2017,8 +2430,8 @@ export default function App() {
                               )
                               setToast(
                                 reminders.includes(i)
-                                  ? "Reminder removed for this session."
-                                  : "Demo reminder saved. No email or notification will be sent.",
+                                  ? (lang === "id" ? "Pengingat dihapus untuk sesi ini." : "Reminder removed for this session.")
+                                  : (lang === "id" ? "Pengingat berhasil dipasang." : "Demo reminder saved. No email or notification will be sent.")
                               )
                             }}
                           >
@@ -2027,8 +2440,8 @@ export default function App() {
                               size={13}
                             />
                             {reminders.includes(i)
-                              ? "Reminder set"
-                              : "Set reminder"}
+                              ? t.dates_reminder_set
+                              : t.dates_set_reminder}
                           </button>
                         </div>
                       </div>
@@ -2039,32 +2452,21 @@ export default function App() {
                       <Icon name="check" size={16} />
                     </span>
                     <span>
-                      <b>Contract start date</b>
-                      <small>Employment Agreement · 13 January 2027</small>
+                      <b>{t.dates_past_title}</b>
+                      <small>{t.dates_past_sub}</small>
                     </span>
-                    <Badge status="Complete" />
+                    <Badge status={t.dates_past_status} />
                   </div>
                 </section>
                 <div>
                   <section className="surface calendar-card">
                     <div className="calendar-header">
                       <h3>
-                        {
-                          [
-                            "January",
-                            "February",
-                            "March",
-                            "April",
-                            "May",
-                            "June",
-                            "July",
-                            "August",
-                            "September",
-                            "October",
-                            "November",
-                            "December",
-                          ][dateMonth]
-                        }{" "}
+                        {lang === "id" ? [
+                          "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+                        ][dateMonth] : [
+                          "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
+                        ][dateMonth]}{" "}
                         2027
                       </h3>
                       <div>
@@ -2087,7 +2489,7 @@ export default function App() {
                       </div>
                     </div>
                     <div className="calendar-grid">
-                      {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+                      {(lang === "id" ? ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"] : ["M", "T", "W", "T", "F", "S", "S"]).map((d, i) => (
                         <span key={`day-${i}`} className="calendar-day-name">
                           {d}
                         </span>
@@ -2118,18 +2520,18 @@ export default function App() {
                               setToast(
                                 `${i + 1} ${
                                   dateMonth === 10
-                                    ? "November"
+                                    ? (lang === "id" ? "November" : "November")
                                     : dateMonth === 11
-                                      ? "December"
-                                      : "of this month"
+                                      ? (lang === "id" ? "Desember" : "December")
+                                      : (lang === "id" ? "bulan ini" : "of this month")
                                 } 2027: ${
                                   dateMonth === 10 && i === 24
-                                    ? "Monthly payment due."
+                                    ? (lang === "id" ? "Jatuh tempo pembayaran gaji bulanan." : "Monthly payment due.")
                                     : dateMonth === 10 && i === 29
-                                      ? "Freelance notice deadline."
+                                      ? (lang === "id" ? "Batas akhir pemberitahuan kontrak freelance." : "Freelance notice deadline.")
                                       : dateMonth === 11 && i === 11
-                                        ? "Employment renewal deadline."
-                                        : "No contract milestones."
+                                        ? (lang === "id" ? "Batas akhir perpanjangan kontrak kerja." : "Employment renewal deadline.")
+                                        : (lang === "id" ? "Tidak ada tenggat waktu dokumen." : "No contract milestones.")
                                 }`,
                               )
                             }
@@ -2142,11 +2544,11 @@ export default function App() {
                     <div className="calendar-legend">
                       <span>
                         <i className="blue-bg" />
-                        Today
+                        {lang === "id" ? "Hari Ini" : "Today"}
                       </span>
                       <span>
                         <i className="mint-bg" />
-                        Contract milestone
+                        {lang === "id" ? "Tenggat Kontrak" : "Contract milestone"}
                       </span>
                     </div>
                   </section>
@@ -2154,12 +2556,9 @@ export default function App() {
                     <span className="stat-icon blue">
                       <Icon name="bell" size={21} />
                     </span>
-                    <h3>A timely nudge.</h3>
-                    <p>
-                      Set reminders for your important dates and stay a step
-                      ahead of your agreements.
-                    </p>
-                    <span>Reminders are session-only in this prototype.</span>
+                    <h3>{t.dates_nudge_title}</h3>
+                    <p>{t.dates_nudge_desc}</p>
+                    <span>{t.dates_nudge_sub}</span>
                   </section>
                 </div>
               </div>
@@ -2170,12 +2569,12 @@ export default function App() {
               <div className="page-heading">
                 <div>
                   <span className="greeting-eyebrow">
-                    MAKE YOURSELF AT HOME
+                    {t.settings_eyebrow}
                   </span>
                   <h1>
-                    Settings<span className="greeting-dot">.</span>
+                    {t.settings_title}<span className="greeting-dot">.</span>
                   </h1>
-                  <p>A workspace that works for you.</p>
+                  <p>{t.settings_sub}</p>
                 </div>
               </div>
               <form
@@ -2188,27 +2587,27 @@ export default function App() {
                     body: JSON.stringify({ name, email, emailReminders, plan }),
                   })
                     .then(() => {
-                      setToast("Pengaturan berhasil disimpan ke backend CLARIQ!")
+                      setToast(lang === "id" ? "Pengaturan berhasil disimpan ke database CLARIQ!" : "Your preferences have been saved.")
                     })
                     .catch(() => {
-                      setToast("Your preferences have been saved.")
+                      setToast(lang === "id" ? "Pengaturan tersimpan." : "Your preferences have been saved.")
                     })
                 }}
               >
                 <SectionTitle
-                  title="Your profile"
-                  subtitle="The basics, all in one place."
+                  title={t.settings_profile_title}
+                  subtitle={t.settings_profile_sub}
                 />
                 <div className="settings-avatar">
-                  <span className="avatar">PA</span>
+                  <span className="avatar">{name.slice(0, 2).toUpperCase() || "PA"}</span>
                   <div>
                     <b>{name}</b>
-                    <span>Personal workspace</span>
+                    <span>{t.nav_personal_workspace}</span>
                   </div>
                 </div>
                 <div className="form-grid">
                   <label>
-                    Full name
+                    {t.settings_fullname}
                     <input
                       value={name}
                       onChange={(e) => setName(e.target.value)}
@@ -2216,7 +2615,7 @@ export default function App() {
                     />
                   </label>
                   <label>
-                    Email address
+                    {t.settings_email}
                     <input
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -2227,15 +2626,14 @@ export default function App() {
                 </div>
                 <div className="settings-divider" />
                 <SectionTitle
-                  title="Notifications"
-                  subtitle="Stay informed without the noise."
+                  title={t.settings_notifications_title}
+                  subtitle={t.settings_notifications_sub}
                 />
                 <label className="switch-row">
                   <span>
-                    <b>Email reminders</b>
+                    <b>{t.settings_reminders}</b>
                     <small>
-                      Get a heads-up before important contract dates. Demo
-                      preference only.
+                      {t.settings_reminders_sub}
                     </small>
                   </span>
                   <input
@@ -2248,24 +2646,24 @@ export default function App() {
                 <div className="settings-divider" />
                 <div className="settings-plan">
                   <div>
-                    <b>Your plan: CLARIQ {plan}</b>
+                    <b>{t.settings_plan_label} {plan}</b>
                     <p>
                       {plan === "Free"
-                        ? "2 contract analyses per month. A great place to start."
-                        : "More clarity, more possibilities."}
+                        ? t.settings_plan_free_desc
+                        : t.settings_plan_plus_desc}
                     </p>
                   </div>
                   <Button
                     variant="secondary"
                     onClick={() => navigate("pricing")}
                   >
-                    Explore plans
+                    {t.nav_explore_plans}
                     <Icon name="arrow" size={15} />
                   </Button>
                 </div>
                 <div className="settings-actions">
-                  <span>Changes are saved for this demo session.</span>
-                  <Button type="submit">Save changes</Button>
+                  <span>{t.settings_demo_save_note}</span>
+                  <Button type="submit">{t.settings_save}</Button>
                 </div>
               </form>
             </>
@@ -2275,16 +2673,16 @@ export default function App() {
               <div className="pricing-heading">
                 <span className="eyebrow">
                   <span className="blue-dot" />
-                  CLARITY FOR EVERY CHAPTER
+                  {t.pricing_eyebrow}
                 </span>
                 <h1>
-                  Less uncertainty.
+                  {t.pricing_h1_1}
                   <br />
-                  More possibility.
+                  {t.pricing_h1_2}
                 </h1>
-                <p>Simple plans. Clear value. Choose what works for you.</p>
+                <p>{t.pricing_sub}</p>
                 <span className="pricing-frequency">
-                  Monthly billing <span>No long-term commitment</span>
+                  {t.pricing_freq} <span>{t.pricing_no_lock}</span>
                 </span>
               </div>
               <div className="pricing-grid">
@@ -2292,40 +2690,57 @@ export default function App() {
                   {
                     name: "Free",
                     price: "0",
-                    description: "A little clarity to get you started.",
-                    features: [
+                    description: lang === "id" ? "Kejelasan dasar untuk memulai." : "A little clarity to get you started.",
+                    features: lang === "id" ? [
+                      "2 analisis dokumen / bulan",
+                      "Rangkuman cerdas AI",
+                      "Pemantauan tanggal penting",
+                      "Penjelasan pasal terhubung ke naskah",
+                    ] : [
                       "2 contract analyses / month",
                       "Basic AI summaries",
                       "Important dates",
                       "Source-linked explanations",
                     ],
-                    cta: "Start for free",
+                    cta: lang === "id" ? "Mulai Gratis" : "Start for free",
                   },
                   {
                     name: "Plus",
                     price: "9",
-                    description: "For the agreements that shape your life.",
-                    features: [
+                    description: lang === "id" ? "Untuk perjanjian penting yang menentukan langkah karir Anda." : "For the agreements that shape your life.",
+                    features: lang === "id" ? [
+                      "20 analisis dokumen / bulan",
+                      "Deteksi risiko mendalam",
+                      "Tanya Kontrak Anda (AI Chat)",
+                      "Perbandingan 2 versi kontrak",
+                      "Semua fitur di paket Free",
+                    ] : [
                       "20 contract analyses / month",
                       "Detailed risk detection",
                       "Ask Your Contract",
                       "Contract comparison",
                       "Everything in Free",
                     ],
-                    cta: "Get more clarity",
+                    cta: lang === "id" ? "Dapatkan Lebih Banyak Kejelasan" : "Get more clarity",
                   },
                   {
                     name: "Business",
                     price: "29",
-                    description: "Keep your whole team on the same page.",
-                    features: [
+                    description: lang === "id" ? "Pastikan seluruh tim sepaham dalam setiap kontrak kesepakatan." : "Keep your whole team on the same page.",
+                    features: lang === "id" ? [
+                      "100 analisis dokumen / bulan",
+                      "Ruang kerja kolaborasi tim",
+                      "Hingga 5 anggota tim",
+                      "Dasbor analitik terpusat",
+                      "Manajemen dokumen tingkat lanjut",
+                    ] : [
                       "100 contract analyses / month",
                       "Team workspace",
                       "Up to 5 workspace members",
                       "Contract dashboard",
                       "Advanced document management",
                     ],
-                    cta: "Choose Business",
+                    cta: lang === "id" ? "Pilih Paket Bisnis" : "Choose Business",
                   },
                 ].map((item) => (
                   <section
@@ -2336,7 +2751,8 @@ export default function App() {
                   >
                     {item.name === "Plus" && (
                       <span className="popular-label">
-                        <Icon name="spark" size={13} />A CLEAR FAVORITE
+                        <Icon name="spark" size={13} />
+                        {t.pricing_favorite}
                       </span>
                     )}
                     <span
@@ -2359,13 +2775,13 @@ export default function App() {
                     <p>{item.description}</p>
                     <div className="plan-price">
                       ${item.price}
-                      <span>/ month</span>
+                      <span>{lang === "id" ? "/ bulan" : "/ month"}</span>
                     </div>
                     <Button
                       variant={item.name === "Plus" ? "primary" : "secondary"}
                       onClick={() => setPlanModal(item.name)}
                     >
-                      {plan === item.name ? "Current plan" : item.cta}
+                      {plan === item.name ? t.pricing_current : item.cta}
                       <Icon name="arrow" size={16} />
                     </Button>
                     <div className="plan-features">
@@ -2381,11 +2797,11 @@ export default function App() {
               </div>
               <div className="pricing-bottom">
                 <Icon name="shield" size={20} />
-                <h3>Your trust is part of every plan.</h3>
+                <h3>{t.pricing_trust_heading}</h3>
                 <p>
-                  AI-assisted document understanding—not legal advice.
+                  {t.pricing_trust_desc}
                   <br />
-                  This is a prototype. Plan selection does not charge you.
+                  {lang === "id" ? "Ini adalah mode prototipe. Pemilihan paket tidak mengenakan biaya." : "This is a prototype. Plan selection does not charge you."}
                 </p>
               </div>
             </>
@@ -2396,34 +2812,33 @@ export default function App() {
                 <div className="landing-hero-copy">
                   <span className="eyebrow">
                     <span className="blue-dot" />
-                    YOUR NEXT CHAPTER. WITH CLARITY.
+                    {lang === "id" ? "LANGKAH ANDA SELANJUTNYA DENGAN PENUH KEPASTIAN" : "YOUR NEXT CHAPTER. WITH CLARITY."}
                   </span>
                   <h1>
-                    Understand
+                    {t.landing_hero_h1_1}
                     <br />
-                    what you <span>sign.</span>
+                    {t.landing_hero_h1_2}
                   </h1>
                   <p>
-                    Turn complex contracts into clear, understandable insights
-                    with AI. Less fine-print anxiety. More confidence.
+                    {t.landing_hero_sub}
                   </p>
                   <div className="hero-actions">
                     <Button icon="upload" onClick={openUpload}>
-                      Analyze a Contract
+                      {t.landing_hero_cta}
                     </Button>
                     <a href="#how-it-works" className="btn btn-secondary">
-                      See How It Works
+                      {t.landing_hero_how}
                       <Icon name="arrow" size={16} />
                     </a>
                   </div>
                   <div className="landing-trust">
                     <Icon name="shield" size={17} />
-                    <span>Made for real life. Not just legal experts.</span>
+                    <span>{t.landing_hero_trust}</span>
                   </div>
                 </div>
                 <div className="landing-upload-card">
                   <div className="landing-art">
-                    <DocumentArt />
+                    <DocumentArt lang={lang} />
                   </div>
                   <button
                     className="landing-drop"
@@ -2445,62 +2860,59 @@ export default function App() {
                     </span>
                     <h3>
                       {dragging
-                        ? "Drop it. Find your clarity."
-                        : "Drop your contract here"}
+                        ? t.landing_drop_active
+                        : t.landing_drop_title}
                     </h3>
                     <p>
-                      or <span>browse files</span> to get started
+                      {t.landing_drop_or} <span>{t.landing_drop_browse}</span>
                     </p>
-                    <small>PDF, DOCX, JPG or PNG · Up to 20 MB</small>
+                    <small>{t.landing_drop_limit}</small>
                   </button>
                   <span className="upload-privacy">
                     <Icon name="lock" size={12} />
-                    Your next step starts with understanding.
+                    {lang === "id" ? "Langkah baru Anda dimulai dari pemahaman." : "Your next step starts with understanding."}
                   </span>
                 </div>
               </section>
               <div className="landing-audience">
-                <span>FOR EVERY AGREEMENT THAT MATTERS</span>
+                <span>{t.landing_audience_label}</span>
                 <div>
-                  Everyday life
+                  {t.landing_aud_1}
                   <span />
-                  Freelancers
+                  {t.landing_aud_2}
                   <span />
-                  Young professionals
+                  {t.landing_aud_3}
                   <span />
-                  Small businesses
+                  {t.landing_aud_4}
                 </div>
               </div>
               <section id="product" className="landing-section">
                 <div className="landing-section-heading">
                   <span className="eyebrow">
-                    FROM FINE PRINT TO CLEAR PICTURE
+                    {t.landing_features_eyebrow}
                   </span>
-                  <h2>Make sense of what matters.</h2>
-                  <p>One document. A whole lot less uncertainty.</p>
+                  <h2>{t.landing_features_title}</h2>
+                  <p>{t.landing_features_sub}</p>
                 </div>
                 <div className="feature-grid">
                   {[
                     {
                       icon: "file" as IconName,
-                      title: "Understand",
-                      description:
-                        "Skip the jargon. Get a clear, plain-language summary of your contract and its important terms.",
-                      label: "THE BIG PICTURE",
+                      title: t.landing_feat_1_title,
+                      description: t.landing_feat_1_desc,
+                      label: t.summary_tag,
                     },
                     {
                       icon: "shield" as IconName,
-                      title: "Detect Risks",
-                      description:
-                        "Spot the clauses that deserve a closer look, from hidden penalties to automatic renewals.",
-                      label: "NO UNWELCOME SURPRISES",
+                      title: t.landing_feat_2_title,
+                      description: t.landing_feat_2_desc,
+                      label: lang === "id" ? "TANPA KEJUTAN MERUGIKAN" : "NO UNWELCOME SURPRISES",
                     },
                     {
                       icon: "calendar" as IconName,
-                      title: "Track Important Dates",
-                      description:
-                        "Stay ahead of payment dates, notice periods, and renewal deadlines. Never miss what matters.",
-                      label: "A STEP AHEAD",
+                      title: t.landing_feat_3_title,
+                      description: t.landing_feat_3_desc,
+                      label: lang === "id" ? "SELALU TERDEPAN" : "A STEP AHEAD",
                     },
                   ].map((f) => (
                     <div className="surface feature-card" key={f.title}>
@@ -2514,13 +2926,13 @@ export default function App() {
                         className="text-link"
                         onClick={() =>
                           navigate(
-                            f.title === "Track Important Dates"
+                            f.title.includes("Tanggal") || f.title.includes("Dates")
                               ? "dates"
                               : "analysis",
                           )
                         }
                       >
-                        Take a closer look
+                        {t.landing_feat_action}
                         <Icon name="arrow" size={15} />
                       </button>
                     </div>
@@ -2532,27 +2944,27 @@ export default function App() {
                 id="how-it-works"
               >
                 <div className="landing-section-heading">
-                  <span className="eyebrow">SIMPLE BY DESIGN</span>
-                  <h2>How CLARIQ works</h2>
-                  <p>From upload to understanding. In a few simple steps.</p>
+                  <span className="eyebrow">{t.landing_how_eyebrow}</span>
+                  <h2>{t.landing_how_title}</h2>
+                  <p>{t.landing_how_sub}</p>
                 </div>
                 <div className="steps-grid">
                   {[
                     {
-                      title: "Upload your contract",
-                      text: "Drop in your document. We take it from there.",
+                      title: t.landing_step_1_title,
+                      text: t.landing_step_1_desc,
                     },
                     {
-                      title: "Let CLARIQ analyze it",
-                      text: "AI turns the complex into something clear.",
+                      title: t.landing_step_2_title,
+                      text: t.landing_step_2_desc,
                     },
                     {
-                      title: "Understand the details",
-                      text: "Explore important clauses, risks, and dates.",
+                      title: t.landing_step_3_title,
+                      text: t.landing_step_3_desc,
                     },
                     {
-                      title: "Make informed decisions",
-                      text: "Your agreement. Your next step. Your call.",
+                      title: t.landing_step_4_title,
+                      text: t.landing_step_4_desc,
                     },
                   ].map((s, i) => (
                     <div key={s.title}>
@@ -2565,26 +2977,24 @@ export default function App() {
               </section>
               <section className="landing-trust-section">
                 <Icon name="shield" size={35} />
-                <h2>Clarity, with the right boundaries.</h2>
-                <p>AI-assisted document understanding — not legal advice.</p>
+                <h2>{t.landing_cta_bottom_title}</h2>
+                <p>{t.trust_footer_desc}</p>
                 <span>
-                  CLARIQ helps you understand your document, ask better
-                  questions, and feel more prepared.
+                  {t.landing_cta_bottom_desc}
                   <br />
-                  For advice specific to your situation, always consult a
-                  qualified legal professional.
+                  {t.landing_cta_bottom_sub}
                 </span>
                 <Button onClick={() => navigate("dashboard")}>
-                  Find your clarity
+                  {t.landing_cta_bottom_btn}
                   <Icon name="arrow" size={17} />
                 </Button>
               </section>
               <footer className="landing-footer">
                 <Logo onClick={() => navigate("landing")} />
-                <span>Understand what you sign.</span>
-                <span>© 2027 CLARIQ. A clearer way forward.</span>
+                <span>{t.nav_footer_tagline}</span>
+                <span>© 2027 CLARIQ. {lang === "id" ? "Langkah cerdas memahami perjanjian." : "A clearer way forward."}</span>
                 <button onClick={() => navigate("pricing")}>
-                  Plans & Pricing
+                  {t.breadcrumb_pricing}
                 </button>
               </footer>
             </>
@@ -2632,9 +3042,9 @@ export default function App() {
                 <Icon name="close" />
               </button>
             </div>
-            <h2 id="upload-title">Your next step starts here.</h2>
+            <h2 id="upload-title">{t.upload_modal_eyebrow}</h2>
             <p className="modal-subtitle">
-              Upload a contract. Find a little more clarity.
+              {t.upload_modal_sub}
             </p>
             <input
               ref={fileInput}
@@ -2663,18 +3073,18 @@ export default function App() {
                 <Icon name={uploadFile ? "file" : "upload"} size={28} />
               </span>
               <h3>
-                {uploadFile ? uploadFile.name : "Drop your contract here"}
+                {uploadFile ? uploadFile.name : t.landing_drop_title}
               </h3>
               <p>
                 {uploadFile ? (
-                  `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB · Click to replace`
+                  `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB · ${lang === "id" ? "Klik untuk mengganti" : "Click to replace"}`
                 ) : (
                   <>
-                    or <b>browse files</b> to get started
+                    {t.landing_drop_or} <b>{t.landing_drop_browse}</b>
                   </>
                 )}
               </p>
-              <small>PDF, DOCX, JPG or PNG · Up to 20 MB</small>
+              <small>{t.landing_drop_limit}</small>
             </button>
             {uploadError && (
               <p className="form-error" role="alert">
@@ -2684,8 +3094,7 @@ export default function App() {
             <div className="upload-demo-note">
               <Icon name="spark" size={16} />
               <p>
-                <b>Explore the prototype.</b> Your file stays in this session.
-                We’ll show a sample analysis, not process its contents.
+                <b>{lang === "id" ? "Jelajahi prototipe." : "Explore the prototype."}</b> {t.upload_sample_note}
               </p>
             </div>
             <Button
@@ -2694,12 +3103,12 @@ export default function App() {
               disabled={!uploadFile}
               onClick={analyzeUpload}
             >
-              View sample analysis
+              {t.upload_btn}
               <Icon name="arrow" size={17} />
             </Button>
             <span className="modal-legal">
               <Icon name="shield" size={13} />
-              Document understanding. Not legal advice.
+              {t.upload_legal}
             </span>
           </div>
         </div>
@@ -2719,7 +3128,7 @@ export default function App() {
             ref={modalRef}
           >
             <div className="drawer-top">
-              <span>CLAUSE EXPLAINED</span>
+              <span>{t.clause_drawer_title}</span>
               <button
                 className="icon-button"
                 onClick={() => setClause(null)}
@@ -2735,40 +3144,40 @@ export default function App() {
                   <>
                     <span
                       className={`stat-icon ${
-                        currentClause.status === "Needs Attention"
+                        /attention|perhatian/i.test(currentClause.status)
                           ? "coral"
-                          : currentClause.status === "Review"
+                          : /review|tinjau/i.test(currentClause.status)
                             ? "amber"
                             : "mint"
                       }`}
                     >
                       <Icon name={clause === 1 ? "warning" : "file"} size={25} />
                     </span>
-                    <h2 id="clause-title">{currentClause.title}</h2>
-                    <Badge status={currentClause.status} />
+                    <h2 id="clause-title">{lang === "id" ? (currentClause.titleId || currentClause.title) : currentClause.title}</h2>
+                    <Badge status={getContractStatus(currentClause.statusId || currentClause.status, lang)} />
                     <div className="explanation-section">
                       <span className="language-tag">
-                        PLAIN LANGUAGE · BAHASA INDONESIA
+                        {t.clause_drawer_tag}
                       </span>
-                      <h3>What does this mean?</h3>
-                      <p>{currentClause.meaning}</p>
+                      <h3>{t.clause_what_means}</h3>
+                      <p>{lang === "id" ? currentClause.meaning : (currentClause.meaningEn || currentClause.meaning)}</p>
                     </div>
                     <div className="why-card">
                       <span className="why-icon">
                         <Icon name="spark" size={20} />
                       </span>
                       <div>
-                        <h3>Why does this matter?</h3>
-                        <p>{currentClause.why}</p>
+                        <h3>{t.clause_why_matters}</h3>
+                        <p>{lang === "id" ? currentClause.why : (currentClause.whyEn || currentClause.why)}</p>
                       </div>
                     </div>
                     <div className="source-section">
-                      <h3>Source</h3>
+                      <h3>{t.clause_source}</h3>
                       <div>
                         <Icon name="file" size={18} />
                         <span>
-                          {currentClause.source}
-                          <small>{selected.name} · Sample document</small>
+                          {lang === "id" ? (currentClause.sourceId || currentClause.source) : currentClause.source}
+                          <small>{getContractName(selected, lang)} · {lang === "id" ? "Dokumen contoh" : "Sample document"}</small>
                         </span>
                       </div>
                       <Button
@@ -2776,25 +3185,24 @@ export default function App() {
                         icon="external"
                         onClick={() => setOriginal(!original)}
                       >
-                        {original ? "Hide Original Clause" : "View Original Clause"}
+                        {original ? t.clause_hide_original : t.clause_view_original}
                       </Button>
                     </div>
                     {original && (
                       <div className="original-viewer">
                         <div>
                           <Icon name="file" size={15} />
-                          <span>ORIGINAL DOCUMENT</span>
-                          <small>Page {clause + 2} of 8</small>
+                          <span>{t.compare_orig_tag}</span>
+                          <small>{lang === "id" ? `Halaman ${clause + 2} dari 8` : `Page ${clause + 2} of 8`}</small>
                         </div>
                         <article>
                           <p className="document-context">
-                            EMPLOYMENT AGREEMENT · PT EXAMPLE INDONESIA
+                            {lang === "id" ? "PERJANJIAN KERJA KARYAWAN · PT EXAMPLE INDONESIA" : "EMPLOYMENT AGREEMENT · PT EXAMPLE INDONESIA"}
                           </p>
-                          <h4>{currentClause.source}</h4>
+                          <h4>{lang === "id" ? (currentClause.sourceId || currentClause.source) : currentClause.source}</h4>
                           <mark>{currentClause.original}</mark>
                           <p className="document-context bottom">
-                            The parties acknowledge and agree to the terms set forth
-                            in this Agreement.
+                            {lang === "id" ? "Para pihak mengakui dan menyetujui seluruh ketentuan yang tercantum dalam Perjanjian ini." : "The parties acknowledge and agree to the terms set forth in this Agreement."}
                           </p>
                         </article>
                       </div>
@@ -2805,9 +3213,7 @@ export default function App() {
               <div className="drawer-disclaimer">
                 <Icon name="shield" size={19} />
                 <p>
-                  <b>Understanding, not legal advice.</b> CLARIQ explains your
-                  document. It does not replace advice from a qualified legal
-                  professional.
+                  <b>{lang === "id" ? "Pemahaman dokumen, bukan nasihat hukum." : "Understanding, not legal advice."}</b> {t.clause_legal_disclaimer}
                 </p>
               </div>
             </div>
@@ -2841,15 +3247,18 @@ export default function App() {
               </button>
             </div>
             <h2 id="plan-title">
-              A little more {planModal === "Free" ? "simplicity" : "clarity"}.
+              {lang === "id"
+                ? `Paket CLARIQ ${planModal}. Lebih banyak kejelasan.`
+                : `A little more ${planModal === "Free" ? "simplicity" : "clarity"}.`}
             </h2>
             <p>
-              You’ve selected CLARIQ <b>{planModal}</b>. This is a demo—no
-              payment details are needed, and you won’t be charged.
+              {lang === "id"
+                ? `Anda memilih paket CLARIQ ${planModal}. Ini adalah prototipe demo—tidak ada informasi pembayaran yang dibutuhkan.`
+                : `You’ve selected CLARIQ ${planModal}. This is a demo—no payment details are needed, and you won’t be charged.`}
             </p>
             <div className="plan-demo-card">
               <Icon name="shield" size={20} />
-              Plan selection is saved for this session only.
+              {lang === "id" ? "Pilihan paket disimpan ke profil akun Anda." : "Plan selection is saved for this session only."}
             </div>
             <Button
               className="full-width"
@@ -2857,14 +3266,264 @@ export default function App() {
                 setPlan(planModal)
                 setPlanModal(null)
                 setToast(
-                  `Welcome to CLARIQ ${planModal}. Your demo plan is selected.`,
+                  lang === "id"
+                    ? `Selamat datang di CLARIQ ${planModal}. Paket demo aktif.`
+                    : `Welcome to CLARIQ ${planModal}. Your demo plan is selected.`
                 )
                 navigate("dashboard")
               }}
             >
-              Continue with {planModal}
+              {lang === "id" ? `Lanjutkan dengan ${planModal}` : `Continue with ${planModal}`}
               <Icon name="arrow" size={17} />
             </Button>
+          </div>
+        </div>
+      )}
+      {authModal && (
+        <div
+          className="modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setAuthModal(null)
+          }}
+        >
+          <div
+            className="modal auth-modal"
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-title"
+          >
+            <div className="modal-heading">
+              <span className="stat-icon blue">
+                <Icon name={authModal === "login" ? "lock" : "spark"} size={22} />
+              </span>
+              <button
+                className="icon-button"
+                aria-label="Tutup formulir"
+                onClick={() => setAuthModal(null)}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+            <h2 id="auth-title">
+              {authModal === "login" ? t.auth_login_title : t.auth_register_title}
+            </h2>
+            <p>
+              {authModal === "login"
+                ? t.auth_login_sub
+                : t.auth_register_sub}
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "6px",
+                margin: "18px 0 16px",
+                background: "#f0f4f9",
+                padding: "4px",
+                borderRadius: "8px",
+              }}
+            >
+              <button
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: "8px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  background: authModal === "login" ? "white" : "transparent",
+                  color: authModal === "login" ? "var(--color-navy)" : "#7b8a9e",
+                  boxShadow: authModal === "login" ? "0 2px 6px #172b4d10" : "none",
+                }}
+                onClick={() => {
+                  setAuthModal("login")
+                  setAuthError("")
+                }}
+              >
+                {t.auth_login_tab}
+              </button>
+              <button
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: "8px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  background: authModal === "register" ? "white" : "transparent",
+                  color: authModal === "register" ? "var(--color-navy)" : "#7b8a9e",
+                  boxShadow:
+                    authModal === "register" ? "0 2px 6px #172b4d10" : "none",
+                }}
+                onClick={() => {
+                  setAuthModal("register")
+                  setAuthError("")
+                }}
+              >
+                {t.auth_register_tab}
+              </button>
+            </div>
+
+            {authError && <div className="form-error">{authError}</div>}
+
+            <form
+              onSubmit={handleAuthSubmit}
+              style={{ display: "flex", flexDirection: "column", gap: "14px" }}
+            >
+              {authModal === "register" && (
+                <div>
+                  <label
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "#617288",
+                      display: "block",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    {t.auth_name_label}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={t.auth_name_placeholder}
+                    value={authName}
+                    onChange={(e) => setAuthName(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "11px 13px",
+                      fontSize: "12px",
+                      border: "1px solid #d9e3ef",
+                      borderRadius: "7px",
+                      outline: "none",
+                      background: "#fcfdff",
+                    }}
+                  />
+                </div>
+              )}
+              <div>
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "#617288",
+                    display: "block",
+                    marginBottom: "6px",
+                  }}
+                >
+                  {t.auth_email_label}
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder={t.auth_email_placeholder}
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "11px 13px",
+                    fontSize: "12px",
+                    border: "1px solid #d9e3ef",
+                    borderRadius: "7px",
+                    outline: "none",
+                    background: "#fcfdff",
+                  }}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "#617288",
+                    display: "block",
+                    marginBottom: "6px",
+                  }}
+                >
+                  {t.auth_pass_label}
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder={t.auth_pass_placeholder}
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "11px 13px",
+                    fontSize: "12px",
+                    border: "1px solid #d9e3ef",
+                    borderRadius: "7px",
+                    outline: "none",
+                    background: "#fcfdff",
+                  }}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="full-width mt-2"
+                disabled={authLoading}
+              >
+                {authLoading
+                  ? t.auth_loading
+                  : authModal === "login"
+                    ? t.auth_btn_login
+                    : t.auth_btn_register}
+                <Icon name="arrow" size={16} />
+              </Button>
+            </form>
+
+            <p
+              style={{
+                textAlign: "center",
+                fontSize: "11px",
+                color: "#8d9eb5",
+                marginTop: "16px",
+              }}
+            >
+              {authModal === "login" ? (
+                <>
+                  {t.auth_footer_register}{" "}
+                  <button
+                    type="button"
+                    style={{
+                      color: "var(--color-clarity)",
+                      fontWeight: 600,
+                      textDecoration: "underline",
+                      padding: 0,
+                    }}
+                    onClick={() => {
+                      setAuthModal("register")
+                      setAuthError("")
+                    }}
+                  >
+                    {t.auth_switch_to_register}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {t.auth_footer_login}{" "}
+                  <button
+                    type="button"
+                    style={{
+                      color: "var(--color-clarity)",
+                      fontWeight: 600,
+                      textDecoration: "underline",
+                      padding: 0,
+                    }}
+                    onClick={() => {
+                      setAuthModal("login")
+                      setAuthError("")
+                    }}
+                  >
+                    {t.auth_switch_to_login}
+                  </button>
+                </>
+              )}
+            </p>
           </div>
         </div>
       )}

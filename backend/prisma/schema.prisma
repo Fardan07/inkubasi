@@ -1,0 +1,80 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id             Int             @id @default(autoincrement())
+  email          String          @unique
+  name           String
+  password       String
+  plan           String          @default("Free")
+  emailReminders Boolean         @default(true)
+  workspaceName  String          @default("Personal workspace")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  contracts      Contract[]
+  dates          ImportantDate[]
+}
+
+model Contract {
+  id             Int             @id @default(autoincrement())
+  name           String
+  nameId         String?
+  company        String
+  type           String          @default("Other")
+  typeId         String?
+  status         String          @default("Review")
+  statusId       String?
+  date           String
+  dateId         String?
+  color          String          @default("blue")
+  summary        String?
+  riskScore      Int             @default(80)
+  userId         Int?
+  user           User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now())
+  clauses        Clause[]
+}
+
+model Clause {
+  id         Int      @id @default(autoincrement())
+  title      String
+  titleId    String?
+  status     String
+  statusId   String?
+  source     String
+  sourceId   String?
+  text       String
+  textId     String?
+  meaning    String
+  meaningEn  String?
+  why        String
+  whyEn      String?
+  original   String
+  contractId Int
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+}
+
+model ImportantDate {
+  id              Int      @id @default(autoincrement())
+  day             String
+  month           String
+  title           String
+  titleId         String?
+  contractName    String
+  contractId      String?
+  date            String
+  dateId          String?
+  tag             String
+  tagId           String?
+  kind            String
+  reminderEnabled Boolean  @default(true)
+  userId          Int?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+}
