@@ -35,6 +35,10 @@ model Contract {
   color          String          @default("blue")
   summary        String?
   riskScore      Int             @default(80)
+  contractType   String?         // "kerja" | "sewa" — Fitur Cek Kontrak
+  legalSummary   String?         // Teks grounding hukum per Pasal / UU yang relevan
+  riskBreakdownJson String?      // JSON string: { safe, review, attention }
+  aiClausesJson  String?         // JSON string: Array<{kutipan, risiko, penjelasan, rujukan?, saran?}>
   userId         Int?
   user           User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt      DateTime        @default(now())

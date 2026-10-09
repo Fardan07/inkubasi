@@ -4,6 +4,14 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma, isDbConnected } from './db.js';
+import {
+  LEGAL,
+  SARAN,
+  CONTOH,
+  simulateAiAnalysis,
+  buildContractFromAnalysis,
+  chatWithAnalyzedContract,
+} from './contractAnalyzer.js';
 
 dotenv.config();
 
@@ -369,6 +377,60 @@ const contractComparisonData = {
 };
 
 // ==========================================
+// ROUTES: CEK KONTRAK (Fitur Analisis AI dengan Grounding Hukum Indonesia)
+// ==========================================
+
+// Analisis teks kontrak (tanpa menyimpan ke daftar kontrak)
+app.post('/api/contract-check/analyze', (req, res) => {
+  const { contractType = 'kerja', contractText = '', fileName = null } = req.body || {};
+  const jenis = contractType === 'sewa' ? 'sewa' : 'kerja';
+
+  if (!contractText?.trim() && !fileName) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tempel teks kontrak atau unggah file terlebih dahulu.',
+    });
+  }
+
+  const teks = contractText?.trim()
+    ? contractText
+    : `[Dokumen diunggah: ${fileName || 'document.pdf'}] ${CONTOH[jenis]}`;
+
+  const ai = simulateAiAnalysis(teks, jenis);
+
+  res.json({
+    success: true,
+    message: 'Analisis AI berhasil!',
+    data: {
+      riskScore: ai.skor,
+      summary: ai.ringkasan,
+      riskBreakdown: {
+        safe: ai.klausul.filter((k) => k.risiko === 'aman').length,
+        review: ai.klausul.filter((k) => k.risiko === 'perhatian').length,
+        attention: ai.klausul.filter((k) => k.risiko === 'tinggi').length,
+      },
+      contractType: jenis,
+      legalSummary: LEGAL[jenis],
+      aiClauses: ai.klausul,
+    },
+  });
+});
+
+// Referensi hukum (konstanta LEGAL)
+app.get('/api/contract-check/legal/:type?', (req, res) => {
+  const t = req.params.type && req.params.type === 'sewa' ? 'sewa' : 'kerja';
+  res.json({
+    success: true,
+    data: {
+      type: t,
+      legal: LEGAL[t],
+      suggestions: SARAN,
+      sample: CONTOH[t],
+    },
+  });
+});
+
+// ==========================================
 // AUTH UTILITIES & MIDDLEWARE
 // ==========================================
 
@@ -635,7 +697,51 @@ app.get('/api/contracts/:id', (req, res) => {
 
 // Create / Upload Contract
 app.post('/api/contracts', (req, res) => {
-  const { name, company, type, fileName } = req.body;
+  const {
+    name,
+    company,
+    type,
+    fileName,
+    // Field khusus fitur Cek Kontrak
+    contractType,
+    contractText,
+    lang = 'id',
+    useAICheck = false,
+  } = req.body || {};
+
+  // ========== MODE BARU: Analisis AI Cek Kontrak dengan Grounding Hukum Indonesia ==========
+  if (useAICheck || contractType || (contractText && contractText.trim().length > 0)) {
+    try {
+      const newContract = buildContractFromAnalysis({
+        name,
+        company,
+        fileName,
+        contractType: contractType === 'sewa' ? 'sewa' : 'kerja',
+        contractText,
+        lang,
+      });
+
+      contracts.unshift(newContract);
+      userProfile.analyzedCount += 1;
+
+      return res.status(201).json({
+        success: true,
+        message: `Analisis selesai! Skor risiko: ${newContract.riskScore}/100 — ${
+          newContract.riskScore >= 55
+            ? 'perlu tindak lanjut cepat.'
+            : newContract.riskScore >= 30
+            ? 'ada klausul yang perlu dicermati.'
+            : 'relatif aman.'
+        }`,
+        data: newContract,
+      });
+    } catch (err) {
+      console.error('AI check error:', err);
+      // fall-through ke mode lama
+    }
+  }
+
+  // ========== MODE LAMA (fallback) ==========
   const contractName = (name || fileName || 'Uploaded Document').replace(/\.[^.]+$/, '');
   
   let docType = type || 'Other';
@@ -753,9 +859,26 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], (req, res) => {
   }
 
   const contract = contracts.find((c) => c.id === contractId) || contracts[0];
-  const q = question.toLowerCase();
   const lang = (req.body.lang || req.query.lang || 'id').toLowerCase();
 
+  // === BRANCH BARU: Pakai aiClauses (jika ada) dari engine Cek Kontrak ===
+  const aiAnswer = chatWithAnalyzedContract({ contract, question, lang });
+  if (aiAnswer) {
+    return res.json({
+      success: true,
+      data: {
+        role: 'assistant',
+        text: aiAnswer.text,
+        source: aiAnswer.source,
+        grounded: true,
+        legalGrounding: contract.legalSummary || null,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  }
+
+  // === FALLBACK MODE LAMA ===
+  const q = question.toLowerCase();
   let source = 1;
   let answer = '';
 
