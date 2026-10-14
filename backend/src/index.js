@@ -456,6 +456,107 @@ const getUserFromReq = async (req) => {
   }
 };
 
+function formatContractRow(row) {
+  if (!row) return null;
+  const parsed = { ...row };
+  if (row.riskBreakdownJson) {
+    try {
+      parsed.riskBreakdown = JSON.parse(row.riskBreakdownJson);
+    } catch {
+      parsed.riskBreakdown = { safe: 6, review: 2, attention: 1 };
+    }
+  } else if (!parsed.riskBreakdown) {
+    parsed.riskBreakdown = { safe: 6, review: 2, attention: 1 };
+  }
+
+  if (row.metaJson) {
+    try {
+      parsed.meta = JSON.parse(row.metaJson);
+    } catch {
+      parsed.meta = {};
+    }
+  }
+
+  if (row.aiClausesJson) {
+    try {
+      parsed.aiClauses = JSON.parse(row.aiClausesJson);
+    } catch {
+      parsed.aiClauses = [];
+    }
+  }
+
+  if (Array.isArray(row.clauses)) {
+    parsed.clauses = row.clauses.map((cl) => ({
+      id: cl.id,
+      title: cl.title,
+      titleId: cl.titleId || undefined,
+      status: cl.status,
+      statusId: cl.statusId || undefined,
+      source: cl.source,
+      sourceId: cl.sourceId || undefined,
+      text: cl.text,
+      textId: cl.textId || undefined,
+      meaning: cl.meaning,
+      meaningEn: cl.meaningEn || undefined,
+      why: cl.why,
+      whyEn: cl.whyEn || undefined,
+      original: cl.original,
+    }));
+  }
+  return parsed;
+}
+
+async function persistContractToDb(contract, req) {
+  if (!isDbConnected() || !prisma) return null;
+  try {
+    const loggedUser = await getUserFromReq(req);
+    const created = await prisma.contract.create({
+      data: {
+        name: contract.name,
+        nameId: contract.nameId || null,
+        company: contract.company,
+        type: contract.type,
+        typeId: contract.typeId || null,
+        status: contract.status,
+        statusId: contract.statusId || null,
+        date: contract.date,
+        dateId: contract.dateId || null,
+        color: contract.color || 'blue',
+        summary: contract.summary || null,
+        riskScore: contract.riskScore || 80,
+        contractType: contract.contractType || null,
+        legalSummary: contract.legalSummary || null,
+        riskBreakdownJson: contract.riskBreakdown ? JSON.stringify(contract.riskBreakdown) : null,
+        aiClausesJson: contract.aiClauses ? JSON.stringify(contract.aiClauses) : null,
+        metaJson: contract.meta ? JSON.stringify(contract.meta) : null,
+        userId: loggedUser ? loggedUser.id : null,
+        clauses: {
+          create: (contract.clauses || []).map((cl) => ({
+            title: cl.title,
+            titleId: cl.titleId || null,
+            status: cl.status,
+            statusId: cl.statusId || null,
+            source: cl.source,
+            sourceId: cl.sourceId || null,
+            text: cl.text,
+            textId: cl.textId || null,
+            meaning: cl.meaning,
+            meaningEn: cl.meaningEn || null,
+            why: cl.why,
+            whyEn: cl.whyEn || null,
+            original: cl.original,
+          })),
+        },
+      },
+      include: { clauses: true },
+    });
+    return formatContractRow(created);
+  } catch (err) {
+    console.warn('⚠️ Gagal menyimpan kontrak ke PostgreSQL:', err.message);
+    return null;
+  }
+}
+
 // ==========================================
 // ROUTES: AUTH (LOGIN & REGISTER)
 // ==========================================
@@ -634,7 +735,32 @@ app.get('/api/health', (req, res) => {
 });
 
 // Dashboard Stats
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', async (req, res) => {
+  if (isDbConnected() && prisma) {
+    try {
+      const dbContracts = await prisma.contract.findMany();
+      const dbDates = await prisma.importantDate.findMany();
+      const needsAttention = dbContracts.filter((c) => /attention/i.test(c.status)).length;
+      const inReview = dbContracts.filter((c) => /review/i.test(c.status)).length;
+      const safe = dbContracts.filter((c) => /safe/i.test(c.status)).length;
+      return res.json({
+        success: true,
+        data: {
+          totalContracts: dbContracts.length,
+          needsAttention,
+          inReview,
+          safe,
+          upcomingDeadlines: dbDates.filter((d) => d.reminderEnabled).length,
+          activePlan: userProfile.plan,
+          analyzedPercentage: '98.5%',
+          dbConnected: true,
+        },
+      });
+    } catch (err) {
+      console.warn('DB stats fallback:', err.message);
+    }
+  }
+
   const needsAttention = contracts.filter((c) => /attention/i.test(c.status)).length;
   const inReview = contracts.filter((c) => /review/i.test(c.status)).length;
   const safe = contracts.filter((c) => /safe/i.test(c.status)).length;
@@ -648,13 +774,51 @@ app.get('/api/stats', (req, res) => {
       upcomingDeadlines: datesList.filter((d) => d.reminderEnabled).length,
       activePlan: userProfile.plan,
       analyzedPercentage: '98.5%',
+      dbConnected: false,
     },
   });
 });
 
 // Contracts List
-app.get('/api/contracts', (req, res) => {
+app.get('/api/contracts', async (req, res) => {
   const { search = '', filter = 'All contracts' } = req.query;
+
+  if (isDbConnected() && prisma) {
+    try {
+      const dbContracts = await prisma.contract.findMany({
+        include: { clauses: true },
+        orderBy: { id: 'desc' },
+      });
+      if (dbContracts && dbContracts.length > 0) {
+        let results = dbContracts.map(formatContractRow);
+        if (search.trim()) {
+          const q = search.toLowerCase();
+          results = results.filter(
+            (c) =>
+              c.name.toLowerCase().includes(q) ||
+              c.company.toLowerCase().includes(q) ||
+              c.type.toLowerCase().includes(q)
+          );
+        }
+        if (filter && filter !== 'All contracts') {
+          if (filter === 'Needs attention') {
+            results = results.filter((c) => c.status === 'Needs Attention');
+          } else {
+            results = results.filter((c) => c.status.toLowerCase() === filter.toLowerCase());
+          }
+        }
+        return res.json({
+          success: true,
+          total: results.length,
+          data: results,
+          dbConnected: true,
+        });
+      }
+    } catch (err) {
+      console.warn('DB contracts fallback:', err.message);
+    }
+  }
+
   let results = [...contracts];
 
   if (search.trim()) {
@@ -679,12 +843,31 @@ app.get('/api/contracts', (req, res) => {
     success: true,
     total: results.length,
     data: results,
+    dbConnected: false,
   });
 });
 
 // Single Contract Detail
-app.get('/api/contracts/:id', (req, res) => {
+app.get('/api/contracts/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (isDbConnected() && prisma) {
+    try {
+      const foundDb = await prisma.contract.findUnique({
+        where: { id },
+        include: { clauses: true },
+      });
+      if (foundDb) {
+        return res.json({
+          success: true,
+          data: formatContractRow(foundDb),
+          dbConnected: true,
+        });
+      }
+    } catch (err) {
+      console.warn('DB single contract fallback:', err.message);
+    }
+  }
+
   const found = contracts.find((c) => c.id === id);
   if (!found) {
     return res.status(404).json({ success: false, message: 'Kontrak tidak ditemukan.' });
@@ -692,11 +875,12 @@ app.get('/api/contracts/:id', (req, res) => {
   res.json({
     success: true,
     data: found,
+    dbConnected: false,
   });
 });
 
 // Create / Upload Contract
-app.post('/api/contracts', (req, res) => {
+app.post('/api/contracts', async (req, res) => {
   const {
     name,
     company,
@@ -721,19 +905,22 @@ app.post('/api/contracts', (req, res) => {
         lang,
       });
 
-      contracts.unshift(newContract);
+      const persisted = await persistContractToDb(newContract, req);
+      const finalContract = persisted || newContract;
+
+      contracts.unshift(finalContract);
       userProfile.analyzedCount += 1;
 
       return res.status(201).json({
         success: true,
-        message: `Analisis selesai! Skor risiko: ${newContract.riskScore}/100 — ${
-          newContract.riskScore >= 55
+        message: `Analisis selesai! Skor risiko: ${finalContract.riskScore}/100 — ${
+          finalContract.riskScore >= 55
             ? 'perlu tindak lanjut cepat.'
-            : newContract.riskScore >= 30
+            : finalContract.riskScore >= 30
             ? 'ada klausul yang perlu dicermati.'
             : 'relatif aman.'
         }`,
-        data: newContract,
+        data: finalContract,
       });
     } catch (err) {
       console.error('AI check error:', err);
@@ -824,33 +1011,45 @@ app.post('/api/contracts', (req, res) => {
     ],
   };
 
-  contracts.unshift(newContract);
+  const persisted = await persistContractToDb(newContract, req);
+  const finalContract = persisted || newContract;
+
+  contracts.unshift(finalContract);
   userProfile.analyzedCount += 1;
 
   res.status(201).json({
     success: true,
     message: 'Dokumen berhasil dianalisis oleh AI CLARIQ!',
-    data: newContract,
+    data: finalContract,
   });
 });
 
 // Delete Contract
-app.delete('/api/contracts/:id', (req, res) => {
+app.delete('/api/contracts/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  let deletedFromDb = false;
+  if (isDbConnected() && prisma) {
+    try {
+      await prisma.contract.delete({ where: { id } });
+      deletedFromDb = true;
+    } catch (err) {
+      console.warn('⚠️ Contract delete in DB:', err.message);
+    }
+  }
   const index = contracts.findIndex((c) => c.id === id);
-  if (index === -1) {
+  if (index === -1 && !deletedFromDb) {
     return res.status(404).json({ success: false, message: 'Kontrak tidak ditemukan.' });
   }
-  const deleted = contracts.splice(index, 1)[0];
+  const deleted = index !== -1 ? contracts.splice(index, 1)[0] : { id, name: `Kontrak #${id}` };
   res.json({
     success: true,
-    message: `Kontrak "${deleted.name}" berhasil dihapus.`,
+    message: `Kontrak "${deleted.name}" berhasil dihapus.${deletedFromDb ? ' (dari database PostgreSQL)' : ''}`,
     data: deleted,
   });
 });
 
 // AI Chat
-app.post(['/api/chat', '/api/contracts/:id/chat'], (req, res) => {
+app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
   const contractId = req.params.id ? parseInt(req.params.id, 10) : req.body.contractId || 1;
   const question = (req.body.question || req.body.message || '').trim();
 
@@ -858,7 +1057,23 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], (req, res) => {
     return res.status(400).json({ success: false, message: 'Pertanyaan tidak boleh kosong.' });
   }
 
-  const contract = contracts.find((c) => c.id === contractId) || contracts[0];
+  let contract = null;
+  if (isDbConnected() && prisma) {
+    try {
+      const dbFound = await prisma.contract.findUnique({
+        where: { id: contractId },
+        include: { clauses: true },
+      });
+      if (dbFound) {
+        contract = formatContractRow(dbFound);
+      }
+    } catch (err) {
+      console.warn('DB chat contract lookup:', err.message);
+    }
+  }
+  if (!contract) {
+    contract = contracts.find((c) => c.id === contractId) || contracts[0];
+  }
   const lang = (req.body.lang || req.query.lang || 'id').toLowerCase();
 
   // === BRANCH BARU: Pakai aiClauses (jika ada) dari engine Cek Kontrak ===
@@ -950,16 +1165,53 @@ app.get('/api/contracts/compare', (req, res) => {
 });
 
 // Important Dates & Reminders
-app.get('/api/dates', (req, res) => {
+app.get('/api/dates', async (req, res) => {
+  if (isDbConnected() && prisma) {
+    try {
+      const dbDates = await prisma.importantDate.findMany({ orderBy: { id: 'asc' } });
+      if (dbDates && dbDates.length > 0) {
+        return res.json({
+          success: true,
+          total: dbDates.length,
+          data: dbDates,
+          dbConnected: true,
+        });
+      }
+    } catch (err) {
+      console.warn('⚠️ Fetching dates from DB failed, using fallback:', err.message);
+    }
+  }
+
   res.json({
     success: true,
     total: datesList.length,
     data: datesList,
+    dbConnected: false,
   });
 });
 
-app.put('/api/dates/:id/reminder', (req, res) => {
+app.put('/api/dates/:id/reminder', async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (isDbConnected() && prisma) {
+    try {
+      const current = await prisma.importantDate.findUnique({ where: { id } });
+      if (current) {
+        const updated = await prisma.importantDate.update({
+          where: { id },
+          data: { reminderEnabled: !current.reminderEnabled },
+        });
+        return res.json({
+          success: true,
+          message: `Pengingat untuk "${updated.title}" ${updated.reminderEnabled ? 'diaktifkan' : 'dinonaktifkan'}.`,
+          data: updated,
+          dbConnected: true,
+        });
+      }
+    } catch (err) {
+      console.warn('⚠️ Updating reminder in DB failed, using fallback:', err.message);
+    }
+  }
+
   const found = datesList.find((d) => d.id === id);
   if (!found) {
     return res.status(404).json({ success: false, message: 'Tanggal tidak ditemukan.' });
@@ -969,6 +1221,7 @@ app.put('/api/dates/:id/reminder', (req, res) => {
     success: true,
     message: `Pengingat untuk "${found.title}" ${found.reminderEnabled ? 'diaktifkan' : 'dinonaktifkan'}.`,
     data: found,
+    dbConnected: false,
   });
 });
 
