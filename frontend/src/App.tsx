@@ -717,8 +717,13 @@ function DocumentArt({ lang = "id" }: { lang?: Lang }) {
 }
 
 export default function App() {
+  const [token, setToken] = useState<string>(() => localStorage.getItem("clariq_token") || "")
   const [page, setPage] = useState<Page>(() => {
     const hash = window.location.hash.slice(1) as Page
+    const savedToken = localStorage.getItem("clariq_token")
+    if (!savedToken) {
+      return hash === "pricing" ? "pricing" : "landing"
+    }
     return [
       "dashboard",
       "contracts",
@@ -734,8 +739,9 @@ export default function App() {
       : "dashboard"
   })
   const [mobileNav, setMobileNav] = useState(false)
-  const [contracts, setContracts] = useState(initialContracts)
-  const [selected, setSelected] = useState(initialContracts[0])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [selected, setSelected] = useState<Contract | null>(null)
+  const [dates, setDates] = useState<any[]>([])
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState("all")
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -753,15 +759,18 @@ export default function App() {
     text: string
     source?: number
   }[]>([])
-  const [compareFiles, setCompareFiles] = useState<string[]>([
-    "Employment Agreement.pdf",
-    "Employment Agreement — revised.pdf",
-  ])
-  const [compared, setCompared] = useState(true)
-  const [reminders, setReminders] = useState<number[]>([0, 1, 2])
+  const [compareFiles, setCompareFiles] = useState<string[]>(["", ""])
+  const [compared, setCompared] = useState(false)
+  const [reminders, setReminders] = useState<number[]>([])
   const [dateMonth, setDateMonth] = useState(10)
-  const [name, setName] = useState("Putri Anindya")
-  const [email, setEmail] = useState("putri.anindya@gmail.com")
+  const [name, setName] = useState<string>(() => {
+    const savedToken = localStorage.getItem("clariq_token")
+    return savedToken ? localStorage.getItem("clariq_name") || "" : ""
+  })
+  const [email, setEmail] = useState<string>(() => {
+    const savedToken = localStorage.getItem("clariq_token")
+    return savedToken ? localStorage.getItem("clariq_email") || "" : ""
+  })
   const [emailReminders, setEmailReminders] = useState(true)
   const [plan, setPlan] = useState("Free")
   const [planModal, setPlanModal] = useState<string | null>(null)
@@ -771,7 +780,6 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState("")
   const [authError, setAuthError] = useState("")
   const [authLoading, setAuthLoading] = useState(false)
-  const [token, setToken] = useState<string>(() => localStorage.getItem("clariq_token") || "")
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("clariq_lang") as Lang) || "id")
   const t = translations[lang]
 
@@ -783,6 +791,57 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const chatBottom = useRef<HTMLDivElement>(null)
+
+  const loadUserData = (authToken?: string) => {
+    const activeToken = authToken || localStorage.getItem("clariq_token") || token
+    if (!activeToken) {
+      setContracts([])
+      setSelected(null)
+      setDates([])
+      setReminders([])
+      setCompareFiles(["", ""])
+      setCompared(false)
+      return
+    }
+
+    fetch("/api/contracts", {
+      headers: { Authorization: `Bearer ${activeToken}` },
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          const enriched = json.data.map((c: any) => ({
+            ...c,
+            nameId: c.nameId || (c.id === 1 ? "Perjanjian Kerja Karyawan" : c.id === 2 ? "Kontrak Kerja Lepas (Freelance)" : c.id === 3 ? "Perjanjian Layanan Vendor" : c.id === 4 ? "Perjanjian Sewa Apartemen" : c.name),
+            typeId: c.typeId || (c.type === "Employment" ? "Ketenagakerjaan" : c.type === "Freelance" ? "Pekerja Lepas" : c.type === "Business" ? "Bisnis / Vendor" : c.type === "Rental" ? "Sewa Menyewa" : c.type),
+            statusId: c.statusId || (c.status === "Needs Attention" ? "Perlu Perhatian" : c.status === "Review" ? "Perlu Tinjauan" : c.status === "Safe" ? "Aman" : c.status),
+            dateId: c.dateId || (c.date === "Nov 12, 2027" ? "12 Nov 2027" : c.date === "Nov 10, 2027" ? "10 Nov 2027" : c.date === "Nov 8, 2027" ? "8 Nov 2027" : c.date === "Nov 5, 2027" ? "5 Nov 2027" : c.date),
+          }))
+          setContracts(enriched)
+          setSelected(enriched.length > 0 ? enriched[0] : null)
+        } else {
+          setContracts([])
+          setSelected(null)
+        }
+      })
+      .catch(() => {
+        setContracts([])
+        setSelected(null)
+      })
+
+    fetch("/api/dates", {
+      headers: { Authorization: `Bearer ${activeToken}` },
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setDates(json.data)
+        } else {
+          setDates([])
+        }
+      })
+      .catch(() => setDates([]))
+  }
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -809,15 +868,22 @@ export default function App() {
 
       setToken(data.token)
       localStorage.setItem("clariq_token", data.token)
-      if (data.user?.name) setName(data.user.name)
-      if (data.user?.email) setEmail(data.user.email)
+      if (data.user?.name) {
+        setName(data.user.name)
+        localStorage.setItem("clariq_name", data.user.name)
+      }
+      if (data.user?.email) {
+        setEmail(data.user.email)
+        localStorage.setItem("clariq_email", data.user.email)
+      }
       if (data.user?.plan) setPlan(data.user.plan)
       setAuthModal(null)
       setAuthEmail("")
       setAuthPassword("")
       setAuthName("")
-      setToast(data.message || "Selamat datang di CLARIQ!")
-      if (page === "landing") navigate("dashboard")
+      loadUserData(data.token)
+      setToast(data.message || (lang === "id" ? "Selamat datang di CLARIQ!" : "Welcome to CLARIQ!"))
+      navigate("dashboard")
     } catch {
       setAuthError("Gagal terhubung ke server backend.")
     } finally {
@@ -827,47 +893,82 @@ export default function App() {
 
   const handleLogout = () => {
     setToken("")
+    setName("")
+    setEmail("")
     localStorage.removeItem("clariq_token")
+    localStorage.removeItem("clariq_name")
+    localStorage.removeItem("clariq_email")
+    setContracts([])
+    setSelected(null)
+    setDates([])
+    setReminders([])
+    setCompareFiles(["", ""])
+    setCompared(false)
     setProfile(false)
-    setToast("Anda telah keluar akun.")
+    setMobileNav(false)
+    setPage("landing")
+    window.location.hash = "landing"
+    setToast(lang === "id" ? "Anda telah keluar akun." : "You have signed out.")
   }
 
   const activeClauses: Clause[] =
     selected && selected.clauses && selected.clauses.length > 0
       ? selected.clauses
-      : clauses
+      : []
 
   useEffect(() => {
-    fetch("/api/contracts")
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          const enriched = json.data.map((c: any) => ({
-            ...c,
-            nameId: c.nameId || (c.id === 1 ? "Perjanjian Kerja Karyawan" : c.id === 2 ? "Kontrak Kerja Lepas (Freelance)" : c.id === 3 ? "Perjanjian Layanan Vendor" : c.id === 4 ? "Perjanjian Sewa Apartemen" : c.name),
-            typeId: c.typeId || (c.type === "Employment" ? "Ketenagakerjaan" : c.type === "Freelance" ? "Pekerja Lepas" : c.type === "Business" ? "Bisnis / Vendor" : c.type === "Rental" ? "Sewa Menyewa" : c.type),
-            statusId: c.statusId || (c.status === "Needs Attention" ? "Perlu Perhatian" : c.status === "Review" ? "Perlu Tinjauan" : c.status === "Safe" ? "Aman" : c.status),
-            dateId: c.dateId || (c.date === "Nov 12, 2027" ? "12 Nov 2027" : c.date === "Nov 10, 2027" ? "10 Nov 2027" : c.date === "Nov 8, 2027" ? "8 Nov 2027" : c.date === "Nov 5, 2027" ? "5 Nov 2027" : c.date),
-          }))
-          setContracts(enriched)
-          setSelected((prev) => enriched.find((c: any) => c.id === prev.id) || enriched[0])
-        }
+    const savedToken = localStorage.getItem("clariq_token")
+    if (!savedToken) {
+      const hash = window.location.hash.slice(1)
+      if (hash !== "pricing" && hash !== "landing") {
+        window.location.hash = "landing"
+      }
+      setContracts([])
+      setSelected(null)
+      setDates([])
+    } else {
+      loadUserData(savedToken)
+      fetch("/api/auth/me", {
+        headers: { Authorization: `Bearer ${savedToken}` },
       })
-      .catch(() => {})
-
-    fetch("/api/user")
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data) {
-          if (json.data.name) setName(json.data.name)
-          if (json.data.email) setEmail(json.data.email)
-          if (json.data.emailReminders !== undefined) setEmailReminders(json.data.emailReminders)
-          if (json.data.plan) setPlan(json.data.plan)
-        }
-      })
-      .catch(() => {})
-  }, [])
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.user) {
+            if (json.user.name) {
+              setName(json.user.name)
+              localStorage.setItem("clariq_name", json.user.name)
+            }
+            if (json.user.email) {
+              setEmail(json.user.email)
+              localStorage.setItem("clariq_email", json.user.email)
+            }
+            if (json.user.plan) setPlan(json.user.plan)
+            if (json.user.emailReminders !== undefined) setEmailReminders(json.user.emailReminders)
+          } else {
+            handleLogout()
+          }
+        })
+        .catch(() => {})
+    }
+  }, [token])
   const navigate = (next: Page) => {
+    const isPublic = next === "landing" || next === "pricing"
+    const savedToken = localStorage.getItem("clariq_token") || token
+    if (!savedToken && !isPublic) {
+      setAuthModal("login")
+      setToast(
+        lang === "id"
+          ? "Silakan masuk atau daftar terlebih dahulu untuk membuka fitur ini."
+          : "Please sign in or register first to access this feature."
+      )
+      setPage("landing")
+      window.location.hash = "landing"
+      setMobileNav(false)
+      setNotifications(false)
+      setProfile(false)
+      setSearch("")
+      return
+    }
     setPage(next)
     window.location.hash = next
     setMobileNav(false)
@@ -914,24 +1015,37 @@ export default function App() {
   useEffect(() => {
     const handler = () => {
       const hash = window.location.hash.slice(1) as Page
-      if (
-        [
-          "dashboard",
-          "contracts",
-          "analysis",
-          "chat",
-          "compare",
-          "dates",
-          "settings",
-          "pricing",
-          "landing",
-        ].includes(hash)
-      )
-        setPage(hash)
+      const validPages: Page[] = [
+        "dashboard",
+        "contracts",
+        "analysis",
+        "chat",
+        "compare",
+        "dates",
+        "settings",
+        "pricing",
+        "landing",
+      ]
+      if (validPages.includes(hash)) {
+        const savedToken = localStorage.getItem("clariq_token") || token
+        const isPublic = hash === "landing" || hash === "pricing"
+        if (!savedToken && !isPublic) {
+          setPage("landing")
+          window.location.hash = "landing"
+          setAuthModal("login")
+          setToast(
+            lang === "id"
+              ? "Silakan masuk atau daftar terlebih dahulu."
+              : "Please sign in or register first."
+          )
+        } else {
+          setPage(hash)
+        }
+      }
     }
     window.addEventListener("hashchange", handler)
     return () => window.removeEventListener("hashchange", handler)
-  }, [])
+  }, [token, lang])
   useEffect(() => {
     if (!toast) return
     const id = window.setTimeout(() => setToast(""), 4500)
@@ -1011,6 +1125,16 @@ export default function App() {
     setUploadError("")
   }
   const openUpload = () => {
+    const savedToken = localStorage.getItem("clariq_token") || token
+    if (!savedToken) {
+      setAuthModal("login")
+      setToast(
+        lang === "id"
+          ? "Silakan masuk atau daftar terlebih dahulu untuk menganalisis dokumen."
+          : "Please sign in or register first to analyze documents."
+      )
+      return
+    }
     setUploadFile(null)
     setUploadError("")
     setUploadOpen(true)
@@ -1020,7 +1144,10 @@ export default function App() {
     try {
       const res = await fetch("/api/contracts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           name: uploadFile.name.replace(/\.[^.]+$/, ""),
           fileName: uploadFile.name,
@@ -1033,7 +1160,8 @@ export default function App() {
           setSelected(json.data)
           setUploadOpen(false)
           navigate("analysis")
-          setToast("Dokumen berhasil dianalisis oleh AI! Hasil telaah telah siap.")
+          setToast(lang === "id" ? "Dokumen berhasil dianalisis oleh AI! Hasil telaah telah siap." : "Document analyzed successfully by AI!")
+          loadUserData(token)
           return
         }
       }
@@ -1141,10 +1269,15 @@ export default function App() {
       label: t.nav_contracts,
       icon: "file",
       page: "contracts",
-      count: String(contracts.length),
+      count: contracts.length > 0 ? String(contracts.length) : undefined,
     },
     { label: t.nav_compare, icon: "compare", page: "compare" },
-    { label: t.nav_dates, icon: "calendar", page: "dates", count: "3" },
+    {
+      label: t.nav_dates,
+      icon: "calendar",
+      page: "dates",
+      count: dates.length > 0 ? String(dates.length) : undefined,
+    },
   ]
   const filteredContracts = contracts.filter((c) => {
     const displayName = getContractName(c, lang)
@@ -1162,81 +1295,102 @@ export default function App() {
     return true
   })
   const isLanding = page === "landing"
-  const contractTable = (all = false) => (
-    <div className="table-scroll">
-      <table className="contracts-table">
-        <thead>
-          <tr>
-            <th>{t.table_contract}</th>
-            <th>{t.table_type}</th>
-            <th>{t.table_status}</th>
-            <th>{t.table_last_analyzed}</th>
-            <th aria-label={t.table_actions} />
-          </tr>
-        </thead>
-        <tbody>
-          {(all ? filteredContracts : contracts.slice(0, 4)).map((c) => (
-            <tr key={c.id} onClick={() => openContract(c)}>
-              <td>
-                <div className="contract-cell">
-                  <span className={`file-icon ${c.color}`}>
-                    <Icon name="file" size={20} />
-                  </span>
-                  <div>
-                    <button
-                      className="contract-name"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openContract(c)
-                      }}
-                    >
-                      {getContractName(c, lang)}
-                    </button>
-                    <span>{c.company}</span>
-                  </div>
-                </div>
-              </td>
-              <td>
-                <span className="type-label">{getContractType(c.typeId || c.type, lang)}</span>
-              </td>
-              <td>
-                <Badge status={getContractStatus(c.statusId || c.status, lang)} />
-              </td>
-              <td className="date-cell">{getContractDate(c.dateId || c.date, lang)}</td>
-              <td>
-                <button
-                  className="icon-button table-arrow"
-                  aria-label={`Open ${getContractName(c, lang)}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openContract(c)
-                  }}
-                >
-                  <Icon name="chevron" size={17} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {all && !filteredContracts.length && (
-        <div className="empty-state">
-          <Icon name="search" size={30} />
-          <h3>{t.table_no_contracts}</h3>
-          <p>{lang === "id" ? "Coba kata kunci pencarian atau filter lain." : "Try a different search or filter."}</p>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setSearch("")
-              setFilter("all")
-            }}
-          >
-            {t.table_clear_filter}
+  const contractTable = (all = false) => {
+    if (contracts.length === 0) {
+      return (
+        <div className="empty-state" style={{ padding: "48px 24px", textAlign: "center" }}>
+          <div style={{ display: "inline-flex", padding: 14, borderRadius: "50%", background: "var(--card-subtle)", color: "var(--brand-primary)", marginBottom: 12 }}>
+            <Icon name="file" size={32} />
+          </div>
+          <h3>{lang === "id" ? "Belum Ada Dokumen Kontrak" : "No Contracts Yet"}</h3>
+          <p style={{ maxWidth: 440, margin: "8px auto 20px", color: "var(--text-secondary)" }}>
+            {lang === "id"
+              ? "Ruang kerja Anda masih bersih. Unggah draf kontrak kerja, freelance, sewa, atau perjanjian bisnis pertama Anda untuk mulai ditinjau oleh AI."
+              : "Your workspace is clean. Upload your first employment, freelance, rental, or business contract draft to start AI review."}
+          </p>
+          <Button icon="upload" onClick={openUpload}>
+            {lang === "id" ? "Unggah Dokumen Pertama" : "Upload First Document"}
           </Button>
         </div>
-      )}
-    </div>
-  )
+      )
+    }
+
+    return (
+      <div className="table-scroll">
+        <table className="contracts-table">
+          <thead>
+            <tr>
+              <th>{t.table_contract}</th>
+              <th>{t.table_type}</th>
+              <th>{t.table_status}</th>
+              <th>{t.table_last_analyzed}</th>
+              <th aria-label={t.table_actions} />
+            </tr>
+          </thead>
+          <tbody>
+            {(all ? filteredContracts : contracts.slice(0, 4)).map((c) => (
+              <tr key={c.id} onClick={() => openContract(c)}>
+                <td>
+                  <div className="contract-cell">
+                    <span className={`file-icon ${c.color || "blue"}`}>
+                      <Icon name="file" size={20} />
+                    </span>
+                    <div>
+                      <button
+                        className="contract-name"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openContract(c)
+                        }}
+                      >
+                        {getContractName(c, lang)}
+                      </button>
+                      <span>{c.company}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span className="type-label">{getContractType(c.typeId || c.type, lang)}</span>
+                </td>
+                <td>
+                  <Badge status={getContractStatus(c.statusId || c.status, lang)} />
+                </td>
+                <td className="date-cell">{getContractDate(c.dateId || c.date, lang)}</td>
+                <td>
+                  <button
+                    className="icon-button table-arrow"
+                    aria-label={`Open ${getContractName(c, lang)}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openContract(c)
+                    }}
+                  >
+                    <Icon name="chevron" size={17} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {all && !filteredContracts.length && (
+          <div className="empty-state">
+            <Icon name="search" size={30} />
+            <h3>{t.table_no_contracts}</h3>
+            <p>{lang === "id" ? "Coba kata kunci pencarian atau filter lain." : "Try a different search or filter."}</p>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setSearch("")
+                setFilter("all")
+              }}
+            >
+              {t.table_clear_filter}
+            </Button>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={`app ${isLanding ? "public-app" : ""}`}>
@@ -1342,24 +1496,44 @@ export default function App() {
             </nav>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <LanguageSwitcher lang={lang} onChange={setLang} />
-              <Button
-                variant="text"
-                onClick={() => {
-                  setAuthModal("login")
-                  setAuthError("")
-                }}
-              >
-                {lang === "id" ? "Masuk" : "Sign In"}
-              </Button>
-              <Button
-                onClick={() => {
-                  setAuthModal("register")
-                  setAuthError("")
-                }}
-              >
-                {lang === "id" ? "Mulai Sekarang" : "Get Started"}
-                <Icon name="arrow" size={16} />
-              </Button>
+              {token ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate("dashboard")}
+                  >
+                    <Icon name="grid" size={16} />
+                    {lang === "id" ? "Buka Dasbor" : "Open Dashboard"}
+                  </Button>
+                  <Button
+                    variant="text"
+                    onClick={handleLogout}
+                  >
+                    {lang === "id" ? "Keluar" : "Sign Out"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="text"
+                    onClick={() => {
+                      setAuthModal("login")
+                      setAuthError("")
+                    }}
+                  >
+                    {lang === "id" ? "Masuk" : "Sign In"}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setAuthModal("register")
+                      setAuthError("")
+                    }}
+                  >
+                    {lang === "id" ? "Mulai Sekarang" : "Get Started"}
+                    <Icon name="arrow" size={16} />
+                  </Button>
+                </>
+              )}
             </div>
             <button
               className="icon-button landing-mobile"
@@ -1370,33 +1544,52 @@ export default function App() {
             </button>
             {mobileNav && (
               <div className="public-mobile-menu">
-                <button onClick={() => navigate("dashboard")}>
-                  {lang === "id" ? "Jelajahi Produk" : "Explore product"}
-                </button>
-                <a href="#how-it-works" onClick={() => setMobileNav(false)}>
-                  {lang === "id" ? "Cara Kerja" : "How it works"}
-                </a>
-                <button onClick={() => navigate("pricing")}>
-                  {lang === "id" ? "Harga & Bisnis" : "Pricing & Business"}
-                </button>
-                <button
-                  onClick={() => {
-                    setAuthModal("login")
-                    setAuthError("")
-                    setMobileNav(false)
-                  }}
-                >
-                  {lang === "id" ? "Masuk Akun" : "Sign in"}
-                </button>
-                <button
-                  onClick={() => {
-                    setAuthModal("register")
-                    setAuthError("")
-                    setMobileNav(false)
-                  }}
-                >
-                  {lang === "id" ? "Mulai Sekarang" : "Get started"}
-                </button>
+                {token ? (
+                  <>
+                    <button onClick={() => navigate("dashboard")}>
+                      {lang === "id" ? "Buka Dasbor" : "Open Dashboard"}
+                    </button>
+                    <a href="#how-it-works" onClick={() => setMobileNav(false)}>
+                      {lang === "id" ? "Cara Kerja" : "How it works"}
+                    </a>
+                    <button onClick={() => navigate("pricing")}>
+                      {lang === "id" ? "Harga & Bisnis" : "Pricing & Business"}
+                    </button>
+                    <button onClick={handleLogout}>
+                      {lang === "id" ? "Keluar Akun" : "Sign out"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => navigate("dashboard")}>
+                      {lang === "id" ? "Jelajahi Produk" : "Explore product"}
+                    </button>
+                    <a href="#how-it-works" onClick={() => setMobileNav(false)}>
+                      {lang === "id" ? "Cara Kerja" : "How it works"}
+                    </a>
+                    <button onClick={() => navigate("pricing")}>
+                      {lang === "id" ? "Harga & Bisnis" : "Pricing & Business"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAuthModal("login")
+                        setAuthError("")
+                        setMobileNav(false)
+                      }}
+                    >
+                      {lang === "id" ? "Masuk Akun" : "Sign in"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAuthModal("register")
+                        setAuthError("")
+                        setMobileNav(false)
+                      }}
+                    >
+                      {lang === "id" ? "Mulai Sekarang" : "Get started"}
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </header>
@@ -1461,32 +1654,42 @@ export default function App() {
                   }}
                 >
                   <Icon name="bell" size={21} />
-                  <span className="notification-dot" />
+                  {(contracts.some((c) => c.status === "Needs Attention" || c.statusId === "Perlu Perhatian") || dates.length > 0) && (
+                    <span className="notification-dot" />
+                  )}
                 </button>
                 {notifications && (
                   <div className="popover notifications">
                     <h3>
-                      {t.notifications_title} <span>{t.notifications_unread}</span>
+                      {t.notifications_title} <span>{(contracts.some((c) => c.status === "Needs Attention" || c.statusId === "Perlu Perhatian") || dates.length > 0) ? t.notifications_unread : ""}</span>
                     </h3>
-                    <button onClick={() => navigate("analysis")}>
-                      <span className="notification-icon attention">
-                        <Icon name="warning" size={19} />
-                      </span>
-                      <span>
-                        <b>{t.notifications_sample_attention}</b>
-                        <small>{t.notifications_sample_attention_sub}</small>
-                      </span>
-                    </button>
-                    <button onClick={() => navigate("dates")}>
-                      <span className="notification-icon blue">
-                        <Icon name="calendar" size={19} />
-                      </span>
-                      <span>
-                        <b>{t.notifications_sample_payment}</b>
-                        <small>{t.notifications_sample_payment_sub}</small>
-                      </span>
-                    </button>
-                    <p>{t.notifications_empty}</p>
+                    {contracts.some((c) => c.status === "Needs Attention" || c.statusId === "Perlu Perhatian") && (
+                      <button onClick={() => navigate("contracts")}>
+                        <span className="notification-icon attention">
+                          <Icon name="warning" size={19} />
+                        </span>
+                        <span>
+                          <b>{t.notifications_sample_attention}</b>
+                          <small>{t.notifications_sample_attention_sub}</small>
+                        </span>
+                      </button>
+                    )}
+                    {dates.length > 0 && (
+                      <button onClick={() => navigate("dates")}>
+                        <span className="notification-icon blue">
+                          <Icon name="calendar" size={19} />
+                        </span>
+                        <span>
+                          <b>{t.notifications_sample_payment}</b>
+                          <small>{t.notifications_sample_payment_sub}</small>
+                        </span>
+                      </button>
+                    )}
+                    {!contracts.some((c) => c.status === "Needs Attention" || c.statusId === "Perlu Perhatian") && dates.length === 0 && (
+                      <p style={{ padding: "12px 6px", textAlign: "center", color: "var(--text-secondary)" }}>
+                        {t.notifications_empty}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1627,7 +1830,7 @@ export default function App() {
                   },
                   {
                     label: t.stat_upcoming_dates,
-                    value: "3",
+                    value: String(dates.length),
                     icon: "calendar" as IconName,
                     color: "amber",
                     note: t.stat_dates_note,
@@ -1704,43 +1907,56 @@ export default function App() {
                 </section>
                 <section className="surface dates-widget">
                   <SectionTitle title={t.horizon_title}>
-                    <span className="count-tag">3</span>
+                    <span className="count-tag">{dates.length}</span>
                   </SectionTitle>
                   <p className="widget-subtitle">
                     {t.horizon_sub}
                   </p>
-                  <div className="mini-dates">
-                    {dateItems.slice(0, 3).map((item, i) => (
-                      <button
-                        key={item.title}
-                        className="mini-date"
-                        onClick={() => navigate("dates")}
-                      >
-                        <span className={`date-square ${item.kind}`}>
-                          <small>{lang === "id" && item.month === "DEC" ? "DES" : item.month}</small>
-                          <b>{item.day}</b>
-                        </span>
-                        <span className="mini-date-text">
-                          <b>{lang === "id" ? (item.titleId || item.title) : item.title}</b>
-                          <small>{lang === "id" ? (item.contractId || item.contract) : item.contract}</small>
-                          <span
-                            className={`days-left ${
-                              i === 1 ? "amber-text" : ""
-                            }`}
-                          >
-                            {lang === "id" ? (item.tagId || item.tag) : item.tag}
+                  {dates.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text-secondary)" }}>
+                      <p style={{ margin: "0 0 14px 0", fontSize: "0.88rem" }}>
+                        {lang === "id" ? "Belum ada tenggat waktu atau pengingat aktif." : "No active deadlines or reminders."}
+                      </p>
+                      <Button variant="secondary" icon="upload" onClick={openUpload} style={{ fontSize: "0.85rem", padding: "8px 14px" }}>
+                        {lang === "id" ? "Unggah Dokumen" : "Upload Document"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mini-dates">
+                      {dates.slice(0, 3).map((item, i) => (
+                        <button
+                          key={item.id || item.title || i}
+                          className="mini-date"
+                          onClick={() => navigate("dates")}
+                        >
+                          <span className={`date-square ${item.kind || "mint"}`}>
+                            <small>{lang === "id" && item.month === "DEC" ? "DES" : item.month}</small>
+                            <b>{item.day}</b>
                           </span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    className="calendar-link"
-                    onClick={() => navigate("dates")}
-                  >
-                    {t.horizon_all}
-                    <Icon name="arrow" size={15} />
-                  </button>
+                          <span className="mini-date-text">
+                            <b>{lang === "id" ? (item.titleId || item.title) : item.title}</b>
+                            <small>{lang === "id" ? (item.contractId || item.contractName || item.contract) : (item.contractName || item.contract)}</small>
+                            <span
+                              className={`days-left ${
+                                i === 1 ? "amber-text" : ""
+                              }`}
+                            >
+                              {lang === "id" ? (item.tagId || item.tag) : item.tag}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {dates.length > 0 && (
+                    <button
+                      className="calendar-link"
+                      onClick={() => navigate("dates")}
+                    >
+                      {t.horizon_all}
+                      <Icon name="arrow" size={15} />
+                    </button>
+                  )}
                 </section>
               </div>
               <section className="new-contract-card">
@@ -1803,7 +2019,7 @@ export default function App() {
                   <b>{contracts.length} {t.library_summary_title}</b>
                   <p>{t.library_summary_sub}</p>
                 </div>
-                <Badge status={t.library_badge_complete} />
+                {contracts.length > 0 && <Badge status={t.library_badge_complete} />}
               </div>
               <section className="surface">
                 <div className="table-toolbar">
@@ -1846,6 +2062,22 @@ export default function App() {
             </>
           )}
           {page === "analysis" && (
+            !selected ? (
+              <div className="surface" style={{ padding: "64px 24px", textAlign: "center", borderRadius: "var(--radius-lg)", margin: "20px 0" }}>
+                <div style={{ display: "inline-flex", padding: 16, borderRadius: "50%", background: "var(--card-subtle)", color: "var(--brand-primary)", marginBottom: 14 }}>
+                  <Icon name="file" size={36} />
+                </div>
+                <h2>{lang === "id" ? "Belum Ada Dokumen untuk Ditelaah" : "No Document Selected for Analysis"}</h2>
+                <p style={{ maxWidth: 460, margin: "8px auto 24px", color: "var(--text-secondary)" }}>
+                  {lang === "id"
+                    ? "Pilih dokumen dari daftar kontrak atau unggah dokumen baru untuk melihat ringkasan AI, deteksi risiko, dan analisis klausul."
+                    : "Select a document from your contracts list or upload a new one to view AI summary, risk detection, and clause breakdown."}
+                </p>
+                <Button icon="upload" onClick={openUpload}>
+                  {lang === "id" ? "Unggah Dokumen Sekarang" : "Upload Document Now"}
+                </Button>
+              </div>
+            ) : (
             <>
               <button
                 className="back-link"
@@ -2030,8 +2262,25 @@ export default function App() {
                 {t.clause_legal_disclaimer}
               </div>
             </>
+            )
           )}
           {page === "chat" && (
+            !selected ? (
+              <div className="surface" style={{ padding: "64px 24px", textAlign: "center", borderRadius: "var(--radius-lg)", margin: "20px 0" }}>
+                <div style={{ display: "inline-flex", padding: 16, borderRadius: "50%", background: "var(--card-subtle)", color: "var(--brand-primary)", marginBottom: 14 }}>
+                  <Icon name="chat" size={36} />
+                </div>
+                <h2>{lang === "id" ? "Pilih Dokumen untuk Tanya Jawab AI" : "Select a Document for AI Q&A"}</h2>
+                <p style={{ maxWidth: 460, margin: "8px auto 24px", color: "var(--text-secondary)" }}>
+                  {lang === "id"
+                    ? "Unggah kontrak baru atau pilih dari daftar dokumen Anda untuk mulai bertanya hal-hal spesifik kepada asisten AI hukum."
+                    : "Upload a new contract or select from your document list to start asking specific questions with the AI legal assistant."}
+                </p>
+                <Button icon="upload" onClick={openUpload}>
+                  {lang === "id" ? "Unggah Dokumen Sekarang" : "Upload Document Now"}
+                </Button>
+              </div>
+            ) : (
             <>
               <button
                 className="back-link"
@@ -2180,6 +2429,7 @@ export default function App() {
                 </form>
               </section>
             </>
+            )
           )}
           {page === "compare" && (
             <>
@@ -2397,66 +2647,90 @@ export default function App() {
                     title={t.dates_timeline_title}
                     subtitle={t.dates_timeline_sub}
                   />
-                  <div className="timeline-list">
-                    {dateItems.map((item, i) => (
-                      <div className="timeline-item" key={item.title}>
-                        <span className={`date-square ${item.kind}`}>
-                          <small>{lang === "id" && item.month === "DEC" ? "DES" : item.month}</small>
-                          <b>{item.day}</b>
-                        </span>
-                        <div className="timeline-copy">
-                          <h3>{lang === "id" ? (item.titleId || item.title) : item.title}</h3>
-                          <button
-                            onClick={() =>
-                              openContract(initialContracts[i === 1 ? 1 : 0])
-                            }
-                          >
-                            {lang === "id" ? (item.contractId || item.contract) : item.contract}
-                            <Icon name="external" size={12} />
-                          </button>
-                          <span>{lang === "id" ? (item.dateId || item.date) : item.date}</span>
-                        </div>
-                        <div className="timeline-actions">
-                          <Badge status={lang === "id" ? (item.tagId || item.tag) : item.tag} />
-                          <button
-                            className={`reminder-button ${
-                              reminders.includes(i) ? "enabled" : ""
-                            }`}
-                            onClick={() => {
-                              setReminders(
-                                reminders.includes(i)
-                                  ? reminders.filter((n) => n !== i)
-                                  : [...reminders, i],
-                              )
-                              setToast(
-                                reminders.includes(i)
-                                  ? (lang === "id" ? "Pengingat dihapus untuk sesi ini." : "Reminder removed for this session.")
-                                  : (lang === "id" ? "Pengingat berhasil dipasang." : "Demo reminder saved. No email or notification will be sent.")
-                              )
-                            }}
-                          >
-                            <Icon
-                              name={reminders.includes(i) ? "check" : "bell"}
-                              size={13}
-                            />
-                            {reminders.includes(i)
-                              ? t.dates_reminder_set
-                              : t.dates_set_reminder}
-                          </button>
-                        </div>
+                  {dates.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-secondary)" }}>
+                      <div style={{ display: "inline-flex", padding: 14, borderRadius: "50%", background: "var(--card-subtle)", color: "var(--brand-primary)", marginBottom: 12 }}>
+                        <Icon name="calendar" size={32} />
                       </div>
-                    ))}
-                  </div>
-                  <div className="past-date">
-                    <span className="past-check">
-                      <Icon name="check" size={16} />
-                    </span>
-                    <span>
-                      <b>{t.dates_past_title}</b>
-                      <small>{t.dates_past_sub}</small>
-                    </span>
-                    <Badge status={t.dates_past_status} />
-                  </div>
+                      <h3 style={{ margin: "0 0 8px 0" }}>{lang === "id" ? "Belum Ada Tanggal Penting" : "No Important Dates Yet"}</h3>
+                      <p style={{ maxWidth: 400, margin: "0 auto 20px", fontSize: "0.9rem" }}>
+                        {lang === "id"
+                          ? "Unggah kontrak atau perjanjian baru untuk mengekstrak otomatis tanggal jatuh tempo pembayaran, perpanjangan, dan masa tenggang."
+                          : "Upload a contract or agreement to automatically extract payment dues, renewals, and notice deadlines."}
+                      </p>
+                      <Button icon="upload" onClick={openUpload}>
+                        {lang === "id" ? "Unggah Dokumen Sekarang" : "Upload Document Now"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="timeline-list">
+                        {dates.map((item, i) => (
+                          <div className="timeline-item" key={item.id || item.title || i}>
+                            <span className={`date-square ${item.kind || "mint"}`}>
+                              <small>{lang === "id" && item.month === "DEC" ? "DES" : item.month}</small>
+                              <b>{item.day}</b>
+                            </span>
+                            <div className="timeline-copy">
+                              <h3>{lang === "id" ? (item.titleId || item.title) : item.title}</h3>
+                              <button
+                                onClick={() => {
+                                  const target = contracts.find(
+                                    (c) =>
+                                      c.name === (item.contractName || item.contract) ||
+                                      c.nameId === (item.contractId || item.contract)
+                                  ) || contracts[0]
+                                  if (target) openContract(target)
+                                }}
+                              >
+                                {lang === "id" ? (item.contractId || item.contractName || item.contract) : (item.contractName || item.contract)}
+                                <Icon name="external" size={12} />
+                              </button>
+                              <span>{lang === "id" ? (item.dateId || item.date) : item.date}</span>
+                            </div>
+                            <div className="timeline-actions">
+                              <Badge status={lang === "id" ? (item.tagId || item.tag) : item.tag} />
+                              <button
+                                className={`reminder-button ${
+                                  reminders.includes(i) ? "enabled" : ""
+                                }`}
+                                onClick={() => {
+                                  setReminders(
+                                    reminders.includes(i)
+                                      ? reminders.filter((n) => n !== i)
+                                      : [...reminders, i],
+                                  )
+                                  setToast(
+                                    reminders.includes(i)
+                                      ? (lang === "id" ? "Pengingat dihapus untuk sesi ini." : "Reminder removed for this session.")
+                                      : (lang === "id" ? "Pengingat berhasil dipasang." : "Demo reminder saved. No email or notification will be sent.")
+                                  )
+                                }}
+                              >
+                                <Icon
+                                  name={reminders.includes(i) ? "check" : "bell"}
+                                  size={13}
+                                />
+                                {reminders.includes(i)
+                                  ? t.dates_reminder_set
+                                  : t.dates_set_reminder}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="past-date">
+                        <span className="past-check">
+                          <Icon name="check" size={16} />
+                        </span>
+                        <span>
+                          <b>{t.dates_past_title}</b>
+                          <small>{t.dates_past_sub}</small>
+                        </span>
+                        <Badge status={t.dates_past_status} />
+                      </div>
+                    </>
+                  )}
                 </section>
                 <div>
                   <section className="surface calendar-card">
@@ -2511,8 +2785,9 @@ export default function App() {
                             className={`${
                               dateMonth === 10 && i === 11 ? "today" : ""
                             } ${
-                              (dateMonth === 10 && [24, 29].includes(i)) ||
-                              (dateMonth === 11 && i === 11)
+                              dates.length > 0 &&
+                              ((dateMonth === 10 && [24, 29].includes(i)) ||
+                              (dateMonth === 11 && i === 11))
                                 ? "has-event"
                                 : ""
                             }`}
@@ -2525,11 +2800,11 @@ export default function App() {
                                       ? (lang === "id" ? "Desember" : "December")
                                       : (lang === "id" ? "bulan ini" : "of this month")
                                 } 2027: ${
-                                  dateMonth === 10 && i === 24
+                                  dates.length > 0 && dateMonth === 10 && i === 24
                                     ? (lang === "id" ? "Jatuh tempo pembayaran gaji bulanan." : "Monthly payment due.")
-                                    : dateMonth === 10 && i === 29
+                                    : dates.length > 0 && dateMonth === 10 && i === 29
                                       ? (lang === "id" ? "Batas akhir pemberitahuan kontrak freelance." : "Freelance notice deadline.")
-                                      : dateMonth === 11 && i === 11
+                                      : dates.length > 0 && dateMonth === 11 && i === 11
                                         ? (lang === "id" ? "Batas akhir perpanjangan kontrak kerja." : "Employment renewal deadline.")
                                         : (lang === "id" ? "Tidak ada tenggat waktu dokumen." : "No contract milestones.")
                                 }`,
@@ -2583,10 +2858,15 @@ export default function App() {
                   e.preventDefault()
                   fetch("/api/user", {
                     method: "PUT",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
                     body: JSON.stringify({ name, email, emailReminders, plan }),
                   })
                     .then(() => {
+                      if (name) localStorage.setItem("clariq_name", name)
+                      if (email) localStorage.setItem("clariq_email", email)
                       setToast(lang === "id" ? "Pengaturan berhasil disimpan ke database CLARIQ!" : "Your preferences have been saved.")
                     })
                     .catch(() => {

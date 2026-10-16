@@ -736,13 +736,15 @@ app.get('/api/health', (req, res) => {
 
 // Dashboard Stats
 app.get('/api/stats', async (req, res) => {
+  const loggedUser = await getUserFromReq(req);
   if (isDbConnected() && prisma) {
     try {
-      const dbContracts = await prisma.contract.findMany();
-      const dbDates = await prisma.importantDate.findMany();
-      const needsAttention = dbContracts.filter((c) => /attention/i.test(c.status)).length;
-      const inReview = dbContracts.filter((c) => /review/i.test(c.status)).length;
-      const safe = dbContracts.filter((c) => /safe/i.test(c.status)).length;
+      const userCondition = loggedUser ? { userId: loggedUser.id } : { id: -1 };
+      const dbContracts = await prisma.contract.findMany({ where: userCondition });
+      const dbDates = await prisma.importantDate.findMany({ where: userCondition });
+      const needsAttention = dbContracts.filter((c) => /attention|perhatian/i.test(c.status || c.statusId)).length;
+      const inReview = dbContracts.filter((c) => /review|tinjau/i.test(c.status || c.statusId)).length;
+      const safe = dbContracts.filter((c) => /safe|aman/i.test(c.status || c.statusId)).length;
       return res.json({
         success: true,
         data: {
@@ -751,8 +753,8 @@ app.get('/api/stats', async (req, res) => {
           inReview,
           safe,
           upcomingDeadlines: dbDates.filter((d) => d.reminderEnabled).length,
-          activePlan: userProfile.plan,
-          analyzedPercentage: '98.5%',
+          activePlan: loggedUser ? loggedUser.plan : 'Free',
+          analyzedPercentage: dbContracts.length > 0 ? '98.5%' : '0%',
           dbConnected: true,
         },
       });
@@ -761,19 +763,21 @@ app.get('/api/stats', async (req, res) => {
     }
   }
 
-  const needsAttention = contracts.filter((c) => /attention/i.test(c.status)).length;
-  const inReview = contracts.filter((c) => /review/i.test(c.status)).length;
-  const safe = contracts.filter((c) => /safe/i.test(c.status)).length;
+  const userContracts = loggedUser ? contracts.filter((c) => c.userId === loggedUser.id) : [];
+  const userDates = loggedUser ? datesList.filter((d) => d.userId === loggedUser.id) : [];
+  const needsAttention = userContracts.filter((c) => /attention|perhatian/i.test(c.status || c.statusId)).length;
+  const inReview = userContracts.filter((c) => /review|tinjau/i.test(c.status || c.statusId)).length;
+  const safe = userContracts.filter((c) => /safe|aman/i.test(c.status || c.statusId)).length;
   res.json({
     success: true,
     data: {
-      totalContracts: contracts.length,
+      totalContracts: userContracts.length,
       needsAttention,
       inReview,
       safe,
-      upcomingDeadlines: datesList.filter((d) => d.reminderEnabled).length,
-      activePlan: userProfile.plan,
-      analyzedPercentage: '98.5%',
+      upcomingDeadlines: userDates.filter((d) => d.reminderEnabled).length,
+      activePlan: loggedUser ? loggedUser.plan : 'Free',
+      analyzedPercentage: userContracts.length > 0 ? '98.5%' : '0%',
       dbConnected: false,
     },
   });
@@ -782,60 +786,68 @@ app.get('/api/stats', async (req, res) => {
 // Contracts List
 app.get('/api/contracts', async (req, res) => {
   const { search = '', filter = 'All contracts' } = req.query;
+  const loggedUser = await getUserFromReq(req);
 
   if (isDbConnected() && prisma) {
     try {
+      const userCondition = loggedUser ? { userId: loggedUser.id } : { id: -1 };
       const dbContracts = await prisma.contract.findMany({
+        where: userCondition,
         include: { clauses: true },
         orderBy: { id: 'desc' },
       });
-      if (dbContracts && dbContracts.length > 0) {
-        let results = dbContracts.map(formatContractRow);
-        if (search.trim()) {
-          const q = search.toLowerCase();
-          results = results.filter(
-            (c) =>
-              c.name.toLowerCase().includes(q) ||
-              c.company.toLowerCase().includes(q) ||
-              c.type.toLowerCase().includes(q)
-          );
-        }
-        if (filter && filter !== 'All contracts') {
-          if (filter === 'Needs attention') {
-            results = results.filter((c) => c.status === 'Needs Attention');
-          } else {
-            results = results.filter((c) => c.status.toLowerCase() === filter.toLowerCase());
-          }
-        }
-        return res.json({
-          success: true,
-          total: results.length,
-          data: results,
-          dbConnected: true,
-        });
+      let results = dbContracts.map(formatContractRow);
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        results = results.filter(
+          (c) =>
+            (c.name && c.name.toLowerCase().includes(q)) ||
+            (c.nameId && c.nameId.toLowerCase().includes(q)) ||
+            (c.company && c.company.toLowerCase().includes(q)) ||
+            (c.type && c.type.toLowerCase().includes(q))
+        );
       }
+      if (filter && filter !== 'All contracts' && filter !== 'all') {
+        if (filter.toLowerCase().includes('attention') || filter.toLowerCase().includes('perhatian')) {
+          results = results.filter((c) => /attention|perhatian/i.test(c.status || c.statusId));
+        } else if (filter.toLowerCase().includes('review') || filter.toLowerCase().includes('tinjau')) {
+          results = results.filter((c) => /review|tinjau/i.test(c.status || c.statusId));
+        } else if (filter.toLowerCase().includes('safe') || filter.toLowerCase().includes('aman')) {
+          results = results.filter((c) => /safe|aman/i.test(c.status || c.statusId));
+        }
+      }
+      return res.json({
+        success: true,
+        total: results.length,
+        data: results,
+        dbConnected: true,
+      });
     } catch (err) {
       console.warn('DB contracts fallback:', err.message);
     }
   }
 
-  let results = [...contracts];
+  const userContracts = loggedUser ? contracts.filter((c) => c.userId === loggedUser.id) : [];
+  let results = [...userContracts];
 
   if (search.trim()) {
     const q = search.toLowerCase();
     results = results.filter(
       (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.company.toLowerCase().includes(q) ||
-        c.type.toLowerCase().includes(q)
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (c.nameId && c.nameId.toLowerCase().includes(q)) ||
+        (c.company && c.company.toLowerCase().includes(q)) ||
+        (c.type && c.type.toLowerCase().includes(q))
     );
   }
 
-  if (filter && filter !== 'All contracts') {
-    if (filter === 'Needs attention') {
-      results = results.filter((c) => c.status === 'Needs Attention');
-    } else {
-      results = results.filter((c) => c.status.toLowerCase() === filter.toLowerCase());
+  if (filter && filter !== 'All contracts' && filter !== 'all') {
+    if (filter.toLowerCase().includes('attention') || filter.toLowerCase().includes('perhatian')) {
+      results = results.filter((c) => /attention|perhatian/i.test(c.status || c.statusId));
+    } else if (filter.toLowerCase().includes('review') || filter.toLowerCase().includes('tinjau')) {
+      results = results.filter((c) => /review|tinjau/i.test(c.status || c.statusId));
+    } else if (filter.toLowerCase().includes('safe') || filter.toLowerCase().includes('aman')) {
+      results = results.filter((c) => /safe|aman/i.test(c.status || c.statusId));
     }
   }
 
@@ -1166,26 +1178,30 @@ app.get('/api/contracts/compare', (req, res) => {
 
 // Important Dates & Reminders
 app.get('/api/dates', async (req, res) => {
+  const loggedUser = await getUserFromReq(req);
   if (isDbConnected() && prisma) {
     try {
-      const dbDates = await prisma.importantDate.findMany({ orderBy: { id: 'asc' } });
-      if (dbDates && dbDates.length > 0) {
-        return res.json({
-          success: true,
-          total: dbDates.length,
-          data: dbDates,
-          dbConnected: true,
-        });
-      }
+      const userCondition = loggedUser ? { userId: loggedUser.id } : { id: -1 };
+      const dbDates = await prisma.importantDate.findMany({
+        where: userCondition,
+        orderBy: { id: 'asc' },
+      });
+      return res.json({
+        success: true,
+        total: dbDates.length,
+        data: dbDates,
+        dbConnected: true,
+      });
     } catch (err) {
       console.warn('⚠️ Fetching dates from DB failed, using fallback:', err.message);
     }
   }
 
+  const userDates = loggedUser ? datesList.filter((d) => d.userId === loggedUser.id) : [];
   res.json({
     success: true,
-    total: datesList.length,
-    data: datesList,
+    total: userDates.length,
+    data: userDates,
     dbConnected: false,
   });
 });
@@ -1231,21 +1247,29 @@ app.get('/api/user', async (req, res) => {
   if (loggedUser) {
     return res.json({ success: true, data: loggedUser });
   }
-  res.json({
-    success: true,
-    data: userProfile,
+  return res.status(401).json({
+    success: false,
+    message: 'Belum terautentikasi.',
+    data: null,
   });
 });
 
 app.put('/api/user', async (req, res) => {
   const { name, email, emailReminders, plan } = req.body;
+  const loggedUser = await getUserFromReq(req);
+  if (!loggedUser) {
+    return res.status(401).json({
+      success: false,
+      message: 'Belum terautentikasi.',
+    });
+  }
+
   if (name !== undefined) userProfile.name = name.trim();
   if (email !== undefined) userProfile.email = email.trim();
   if (emailReminders !== undefined) userProfile.emailReminders = Boolean(emailReminders);
   if (plan !== undefined) userProfile.plan = plan;
 
-  const loggedUser = await getUserFromReq(req);
-  if (loggedUser && isDbConnected() && prisma) {
+  if (isDbConnected() && prisma) {
     try {
       const updated = await prisma.user.update({
         where: { id: loggedUser.id },
@@ -1262,7 +1286,13 @@ app.put('/api/user', async (req, res) => {
   res.json({
     success: true,
     message: 'Pengaturan profil berhasil diperbarui!',
-    data: userProfile,
+    data: {
+      ...loggedUser,
+      name: name !== undefined ? name.trim() : loggedUser.name,
+      email: email !== undefined ? email.trim() : loggedUser.email,
+      emailReminders: emailReminders !== undefined ? Boolean(emailReminders) : loggedUser.emailReminders,
+      plan: plan !== undefined ? plan : loggedUser.plan,
+    },
   });
 });
 
