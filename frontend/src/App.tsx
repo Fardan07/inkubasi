@@ -409,7 +409,7 @@ function getContractStatus(status?: string, currentLang: Lang = "id"): string {
   }
 }
 
-function getContractName(c?: Contract, currentLang: Lang = "id"): string {
+function getContractName(c?: Contract | null, currentLang: Lang = "id"): string {
   if (!c) return ""
   if (currentLang === "id") {
     if (c.nameId) return c.nameId
