@@ -43,6 +43,66 @@ Pasal 5: Pemilik berhak menaikkan harga sewa kapan saja tanpa pemberitahuan sebe
 Pasal 7: Penyewa wajib mengganti seluruh biaya perbaikan kamar termasuk kerusakan akibat usia bangunan.`,
 };
 
+// ============================================================
+// TOPIC GUARD: AI CLARIQ hanya menjawab seputar analisis kontrak & hukumnya
+// ============================================================
+
+const TOPIK_KONTRAK = [
+  // Dokumen, analisis, & aplikasi
+  'kontrak', 'perjanjian', 'dokumen', 'pasal', 'klausul', 'analisis', 'analisa', 'risiko', 'resiko', 'skor',
+  'tinjau', 'review', 'unggah', 'upload', 'file', 'pdf', 'clariq', 'aplikasi', 'fitur', 'dashboard', 'pengingat',
+  // Ketentuan umum kontrak
+  'pihak', 'kesepakatan', 'tanda tangan', 'ditandatangani', 'hak', 'kewajiban', 'wanprestasi', 'somasi',
+  'ganti rugi', 'sanksi', 'denda', 'penalti', 'pinalti', 'kompensasi', 'jatuh tempo', 'tenggat', 'berakhir',
+  'perpanjang', 'perpanjangan', 'masa berlaku', 'jangka waktu', 'otomatis',
+  // Ketenagakerjaan
+  'kerja', 'karyawan', 'pegawai', 'pekerja', 'buruh', 'atasan', 'perusahaan', 'gaji', 'upah', 'tunjangan',
+  'pesangon', 'phk', 'resign', 'mundur', 'probation', 'lembur', 'cuti', 'bpjs', 'pkwt', 'pkwtt',
+  'tenaga kerja', 'ketenagakerjaan', 'pp 35', 'uu 13', '13/2003', '35/2021',
+  // Sewa menyewa
+  'sewa', 'menyewa', 'penyewa', 'pemilik', 'deposit', 'jaminan', 'apartemen', 'kos', 'rumah', 'ruko', 'kamar',
+  'perbaikan', 'kerusakan', 'renovasi', 'maintenance', 'kuhperdata', 'kuh perdata', '1550', '1560', '1587',
+  // Hukum & perjanjian bisnis
+  'hukum', 'legal', 'undang-undang', 'regulasi', 'aturan', 'rujukan', 'pengacara', 'advokat', 'notaris',
+  'sengketa', 'pengadilan', 'mediasi', 'arbitrase', 'bisnis', 'freelance', 'vendor', 'nda', 'kerahasiaan',
+  'konfidensial', 'intelektual', 'hak cipta',
+];
+
+const KATA_PERCAKAPAN = [
+  'halo', 'hai', 'hi', 'hello', 'helo', 'pagi', 'siang', 'sore', 'malam', 'assalamualaikum', 'permisi',
+  'terima', 'kasih', 'makasih', 'thanks', 'thank', 'you', 'oke', 'ok', 'siap', 'baik', 'ya', 'bisa', 'boleh',
+  'tolong', 'bantu', 'kenapa', 'mengapa', 'jelaskan', 'lanjut', 'detail', 'rinci', 'lebih', 'jelas', 'maksudnya',
+  'artinya', 'contoh', 'kok', 'gimana', 'bagaimana', 'apa', 'ini', 'itu', 'nya', 'lagi', 'dong', 'deh', 'sih',
+  'kah', 'yang', 'mana', 'mohon',
+];
+
+/**
+ * Cek apakah pertanyaan masih seputar topik CLARIQ (analisis kontrak & hukum kerja/sewa).
+ * @param {string} question
+ * @returns {boolean}
+ */
+export function isContractOnTopic(question) {
+  const q = (question || '').toLowerCase().replace(/[^\w\s/]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!q) return false;
+
+  if (TOPIK_KONTRAK.some((k) => q.includes(k))) return true;
+
+  // Salam / lanjutan percakapan singkat (maks 4 kata) tetap dijawab
+  const words = q.split(' ').filter(Boolean);
+  if (words.length <= 4 && words.every((w) => KATA_PERCAKAPAN.includes(w))) return true;
+
+  return false;
+}
+
+/**
+ * Balasan standar saat pertanyaan di luar topik CLARIQ.
+ */
+export function offTopicReply(lang = 'id') {
+  return lang === 'en'
+    ? 'Sorry, I can only answer questions about contract analysis and employment/lease law — for example clauses, risk scores, penalties, severance, deposits, or contract renewal. Please ask about your contract document instead.'
+    : 'Maaf, saya hanya menjawab pertanyaan seputar topik analisis kontrak dan hukum ketenagakerjaan/sewa — misalnya klausul, skor risiko, denda, pesangon, deposit, atau perpanjangan kontrak. Silakan ajukan pertanyaan tentang dokumen kontrak Anda.';
+}
+
 /**
  * Simulasikan analisis AI berbasis aturan & regex untuk kontrak teks.
  * @param {string} teks - Teks kontrak (bisa hasil paste / hasil ekstraksi PDF)
@@ -415,6 +475,8 @@ export default {
   LEGAL,
   SARAN,
   CONTOH,
+  isContractOnTopic,
+  offTopicReply,
   simulateAiAnalysis,
   buildContractFromAnalysis,
   chatWithAnalyzedContract,

@@ -8,6 +8,8 @@ import {
   LEGAL,
   SARAN,
   CONTOH,
+  isContractOnTopic,
+  offTopicReply,
   simulateAiAnalysis,
   buildContractFromAnalysis,
   chatWithAnalyzedContract,
@@ -1064,9 +1066,25 @@ app.delete('/api/contracts/:id', async (req, res) => {
 app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
   const contractId = req.params.id ? parseInt(req.params.id, 10) : req.body.contractId || 1;
   const question = (req.body.question || req.body.message || '').trim();
+  const lang = (req.body.lang || req.query.lang || 'id').toLowerCase();
 
   if (!question) {
     return res.status(400).json({ success: false, message: 'Pertanyaan tidak boleh kosong.' });
+  }
+
+  // === TOPIC GUARD: AI hanya menjawab seputar topik kontrak & hukumnya ===
+  if (!isContractOnTopic(question)) {
+    return res.json({
+      success: true,
+      data: {
+        role: 'assistant',
+        text: offTopicReply(lang),
+        source: 0,
+        grounded: false,
+        offTopic: true,
+        timestamp: new Date().toISOString(),
+      },
+    });
   }
 
   let contract = null;
@@ -1086,7 +1104,6 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
   if (!contract) {
     contract = contracts.find((c) => c.id === contractId) || contracts[0];
   }
-  const lang = (req.body.lang || req.query.lang || 'id').toLowerCase();
 
   // === BRANCH BARU: Pakai aiClauses (jika ada) dari engine Cek Kontrak ===
   const aiAnswer = chatWithAnalyzedContract({ contract, question, lang });
