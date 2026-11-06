@@ -9,6 +9,8 @@ import {
   LEGAL,
   SARAN,
   CONTOH,
+  isContractOnTopic,
+  offTopicReply,
   simulateAiAnalysis,
   buildContractFromAnalysis,
   chatWithAnalyzedContract,
@@ -1217,6 +1219,7 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
 
   const contractId = req.params.id ? parseInt(req.params.id, 10) : req.body.contractId || 1;
   const question = (req.body.question || req.body.message || '').trim();
+  const lang = (req.body.lang || req.query.lang || 'id').toLowerCase();
 
   if (!question) {
     return res.status(400).json({ success: false, message: 'Pertanyaan tidak boleh kosong.' });
