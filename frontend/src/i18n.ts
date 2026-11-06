@@ -13,7 +13,7 @@ export const translations = {
     nav_personal_workspace: "Ruang Kerja Pribadi",
     nav_plan_suffix: "paket",
     nav_upgrade_title: "Lebih banyak kejelasan.",
-    nav_upgrade_desc: "Lebih banyak kontrak. Analisis lebih dalam. Coba CLARIQ Plus.",
+    nav_upgrade_desc: "Lebih banyak kontrak. Analisis lebih dalam. Coba Cek Kontrak Plus.",
     nav_explore_plans: "Lihat pilihan paket",
     nav_footer_tagline: "Pahami apa yang Anda tanda tangani.",
 
@@ -109,7 +109,7 @@ export const translations = {
 
     // Analysis
     analysis_back: "Kembali ke Kontrak Saya",
-    analysis_sample_note: "Contoh analisis AI — Wawasan ini mengilustrasikan pengalaman CLARIQ dan siap dieksplorasi.",
+    analysis_sample_note: "Contoh analisis AI — Wawasan ini mengilustrasikan pengalaman Cek Kontrak dan siap dieksplorasi.",
     analysis_ask_btn: "Tanya kontrak Anda",
     summary_heading: "Rangkuman Dokumen AI",
     summary_tag: "GAMBARAN BESAR",
@@ -131,7 +131,7 @@ export const translations = {
     clause_source: "Sumber Pasal",
     clause_view_original: "Lihat Naskah Asli Dokumen",
     clause_hide_original: "Sembunyikan Naskah Asli",
-    clause_legal_disclaimer: "CLARIQ membantu menjelaskan dokumen Anda. Ini bukan pengganti nasihat hukum dari profesional.",
+    clause_legal_disclaimer: "Cek Kontrak membantu menjelaskan dokumen Anda. Ini bukan pengganti nasihat hukum dari profesional.",
     clause_drawer_title: "PENJELASAN KLAUSUL",
     clause_drawer_tag: "BAHASA SEDERHANA · BAHASA INDONESIA",
 
@@ -209,7 +209,7 @@ export const translations = {
     settings_notifications_sub: "Tetap terinformasi tanpa terganggu notifikasi berlebih.",
     settings_reminders: "Pengingat Email",
     settings_reminders_sub: "Dapatkan pemberitahuan email sebelum tenggat waktu kontrak berakhir.",
-    settings_plan_label: "Paket Anda: CLARIQ",
+    settings_plan_label: "Paket Anda: Cek Kontrak",
     settings_plan_free_desc: "2 analisis dokumen per bulan. Pilihan tepat untuk memulai.",
     settings_plan_plus_desc: "Lebih banyak kejelasan, fitur perbandingan, dan fleksibilitas penuh.",
     settings_save: "Simpan Perubahan",
@@ -231,7 +231,7 @@ export const translations = {
     landing_badge: "DIPERCAYA OLEH RATUSAN FREELANCER & BISNIS",
     landing_hero_h1_1: "Pahami apa yang Anda",
     landing_hero_h1_2: "tanda tangani",
-    landing_hero_sub: "CLARIQ membedah pasal dan kontrak berbelit menjadi bahasa yang santai, jelas, dan tanpa istilah hukum yang memusingkan.",
+    landing_hero_sub: "Cek Kontrak membedah pasal dan kontrak berbelit menjadi bahasa yang santai, jelas, dan tanpa istilah hukum yang memusingkan.",
     landing_hero_cta: "Mulai Gratis Sekarang",
     landing_hero_how: "Lihat Cara Kerja",
     landing_hero_trust: "Dirancang untuk kehidupan nyata. Bukan cuma ahli hukum.",
@@ -256,7 +256,7 @@ export const translations = {
     landing_feat_3_desc: "Selalu terdepan memantau tanggal pembayaran, masa pemberitahuan, dan tenggat perpanjangan kontrak.",
     landing_feat_action: "Lihat lebih detail",
     landing_how_eyebrow: "SEDERHANA SEJAK AWAL",
-    landing_how_title: "Cara Kerja CLARIQ",
+    landing_how_title: "Cara Kerja Cek Kontrak",
     landing_how_sub: "Dari unggah file hingga paham isi dokumen, hanya dalam beberapa langkah mudah.",
     landing_step_1_title: "Unggah dokumen Anda",
     landing_step_1_desc: "Tarik draf kontrak perjanjian Anda ke aplikasi. Kami yang akan mengurus sisanya.",
@@ -267,7 +267,7 @@ export const translations = {
     landing_step_4_title: "Ambil keputusan tepat",
     landing_step_4_desc: "Perjanjian Anda. Keputusan Anda. Masuk ke ruang kesepakatan dengan percaya diri.",
     landing_cta_bottom_title: "Kejelasan dokumen, dengan batasan yang tepat.",
-    landing_cta_bottom_desc: "CLARIQ membantu Anda memahami isi kontrak, mengajukan pertanyaan yang lebih tepat, dan merasa lebih siap.",
+    landing_cta_bottom_desc: "Cek Kontrak membantu Anda memahami isi kontrak, mengajukan pertanyaan yang lebih tepat, dan merasa lebih siap.",
     landing_cta_bottom_sub: "Untuk kebutuhan nasihat hukum kasus tertentu, disarankan tetap berkonsultasi dengan profesional hukum berlisensi.",
     landing_cta_bottom_btn: "Mulai Temukan Kejelasan",
 
@@ -281,7 +281,7 @@ export const translations = {
     // Auth Modal
     auth_login_tab: "Masuk Akun",
     auth_register_tab: "Daftar Akun Baru",
-    auth_login_title: "Masuk ke CLARIQ",
+    auth_login_title: "Masuk ke Cek Kontrak",
     auth_register_title: "Buat Akun Baru",
     auth_login_sub: "Akses seluruh analisis dokumen kontrak dan riwayat chat Anda.",
     auth_register_sub: "Daftar untuk mengelola dan memahami kontrak Anda secara mudah.",
@@ -299,6 +299,51 @@ export const translations = {
     auth_switch_to_register: "Daftar sekarang",
     auth_switch_to_login: "Masuk di sini",
     auth_secure_note: "Koneksi aman dengan database Neon PostgreSQL.",
+
+    // LegalTech Overhaul & Real-world AI Features
+    upload_extracting: "Mengekstrak teks dokumen PDF...",
+    upload_extracted_success: "Berhasil mengekstrak teks dokumen",
+    upload_extracted_preview: "Pratinjau Teks Dokumen",
+    upload_demo_kevin_btn: "Gunakan Contoh Kontrak Nyata (Kasus Kevin Birowo)",
+    upload_scan_warning: "Pastikan PDF berbasis teks, bukan hasil foto/scan gambar.",
+    
+    red_flag_title: "⚠️ Jebakan Kontrak Terdeteksi: Denda Resign Melebihi Gaji Bulanan!",
+    red_flag_desc: "Perjanjian ini membebankan Denda Resign yang lebih besar dari Gaji Bulanan selama masa uji coba. Klausul ini berpotensi mengeksploitasi pekerja dan bertentangan dengan prinsip keadilan serta PP No. 35/2021 jo. Putusan MK No. 168/PUU-XXI/2023.",
+    red_flag_probation_note: "Perhatian Pasal 58 UU 13/2003: Masa percobaan (probation) dilarang untuk kontrak kerja waktu tertentu (PKWT). Jika kontrak ini PKWT, maka masa uji coba dan dendanya BATAL DEMI HUKUM.",
+
+    chip_salary: "💬 Berapa gaji & kapan dibayar?",
+    chip_penalty: "⚠️ Apakah ada denda jika resign?",
+    chip_probation: "⏳ Apakah ada masa uji coba?",
+    chip_hours: "🕒 Bagaimana aturan jam kerjanya?",
+
+    insight_salary_title: "Gaji Pokok & Upah",
+    insight_hours_title: "Jam & Hari Kerja",
+    insight_probation_title: "Masa Uji Coba / Notice",
+    insight_role_title: "Posisi & Perusahaan",
+
+    legal_disclaimer_title: "Disclaimer Hukum Resmi Cek Kontrak",
+    legal_disclaimer_body: "Hasil evaluasi Cek Kontrak merupakan instrumen literasi hukum berbasis kecerdasan buatan merujuk pada regulasi ketenagakerjaan Indonesia (UU No. 13/2003, UU Cipta Kerja No. 6/2023, PP No. 35/2021, Putusan MK No. 168/PUU-XXI/2023) dan KUHPerdata Buku III. Hasil ini bersifat edukasi dan bukan pengganti nasihat atau konsultasi hukum resmi dengan advokat berlisensi.",
+
+    delete_confirm_title: "Hapus Dokumen Kontrak?",
+    delete_confirm_desc: "Apakah Anda yakin ingin menghapus kontrak ini dari akun Anda? Tindakan ini tidak dapat dibatalkan.",
+    delete_confirm_btn: "Ya, Hapus Kontrak",
+    delete_cancel_btn: "Batal",
+    delete_success: "Kontrak berhasil dihapus dari sistem.",
+    delete_action_btn: "Hapus",
+
+    compare_select_doc_a: "Pilih Dokumen A",
+    compare_select_doc_b: "Pilih Dokumen B",
+    compare_choose_existing: "Pilih dari Kontrak Saya...",
+    compare_or_upload_new: "Atau pilih/unggah file baru",
+
+    auth_err_name_required: "Nama lengkap wajib diisi.",
+    auth_err_email_required: "Alamat email wajib diisi.",
+    auth_err_email_invalid: "Format email tidak valid (contoh: nama@perusahaan.com).",
+    auth_err_pass_required: "Kata sandi wajib diisi.",
+    auth_err_pass_length: "Kata sandi minimal harus 6 karakter.",
+
+    upload_docx_guidance: "Format Word (.docx) dapat disalin langsung: silakan gunakan tab 'Tempel Teks Pasal (Paste)' untuk analisis instan.",
+    upload_image_guidance: "Dokumen gambar/scan belum mendukung ekstraksi otomatis. Silakan gunakan PDF berbasis teks atau salin isi kontrak ke tab 'Tempel Teks Pasal'.",
   },
 
   en: {
@@ -313,7 +358,7 @@ export const translations = {
     nav_personal_workspace: "Personal workspace",
     nav_plan_suffix: "plan",
     nav_upgrade_title: "A little more clarity.",
-    nav_upgrade_desc: "More contracts. Deeper insights. Meet CLARIQ Plus.",
+    nav_upgrade_desc: "More contracts. Deeper insights. Meet Cek Kontrak Plus.",
     nav_explore_plans: "Explore plans",
     nav_footer_tagline: "Understand what you sign.",
 
@@ -409,7 +454,7 @@ export const translations = {
 
     // Analysis
     analysis_back: "Back to My Contracts",
-    analysis_sample_note: "Sample AI analysis — These insights illustrate CLARIQ's experience. They are not generated from your uploaded document.",
+    analysis_sample_note: "Sample AI analysis — These insights illustrate Cek Kontrak's experience. They are not generated from your uploaded document.",
     analysis_ask_btn: "Ask your contract",
     summary_heading: "AI Summary",
     summary_tag: "THE BIG PICTURE",
@@ -431,7 +476,7 @@ export const translations = {
     clause_source: "Source",
     clause_view_original: "View Original Clause",
     clause_hide_original: "Hide Original Clause",
-    clause_legal_disclaimer: "CLARIQ explains your document. It does not replace professional legal advice.",
+    clause_legal_disclaimer: "Cek Kontrak explains your document. It does not replace professional legal advice.",
     clause_drawer_title: "CLAUSE EXPLAINED",
     clause_drawer_tag: "PLAIN LANGUAGE · ENGLISH",
 
@@ -509,7 +554,7 @@ export const translations = {
     settings_notifications_sub: "Stay informed without the noise.",
     settings_reminders: "Email reminders",
     settings_reminders_sub: "Get a heads-up before important contract dates.",
-    settings_plan_label: "Your plan: CLARIQ",
+    settings_plan_label: "Your plan: Cek Kontrak",
     settings_plan_free_desc: "2 contract analyses per month. A great place to start.",
     settings_plan_plus_desc: "More clarity, more possibilities.",
     settings_save: "Save changes",
@@ -556,11 +601,11 @@ export const translations = {
     landing_feat_3_desc: "Stay ahead of payment dates, notice periods, and renewal deadlines. Never miss what matters.",
     landing_feat_action: "Take a closer look",
     landing_how_eyebrow: "SIMPLE BY DESIGN",
-    landing_how_title: "How CLARIQ works",
+    landing_how_title: "How Cek Kontrak works",
     landing_how_sub: "From upload to understanding. In a few simple steps.",
     landing_step_1_title: "Upload your contract",
     landing_step_1_desc: "Drop in your document. We take it from there.",
-    landing_step_2_title: "Let CLARIQ analyze it",
+    landing_step_2_title: "Let Cek Kontrak analyze it",
     landing_step_2_desc: "AI turns the complex into something clear.",
     landing_step_3_title: "Understand the details",
     landing_step_3_desc: "Explore important clauses, risks, and dates.",
@@ -581,7 +626,7 @@ export const translations = {
     // Auth Modal
     auth_login_tab: "Sign In",
     auth_register_tab: "Create Account",
-    auth_login_title: "Sign in to CLARIQ",
+    auth_login_title: "Sign in to Cek Kontrak",
     auth_register_title: "Create your account",
     auth_login_sub: "Access all your contract analyses and chat history.",
     auth_register_sub: "Sign up to organize and understand agreements with ease.",
@@ -599,5 +644,50 @@ export const translations = {
     auth_switch_to_register: "Sign up here",
     auth_switch_to_login: "Sign in here",
     auth_secure_note: "Secure connection with Neon PostgreSQL database.",
+
+    // LegalTech Overhaul & Real-world AI Features
+    upload_extracting: "Extracting text from PDF document...",
+    upload_extracted_success: "Successfully extracted document text",
+    upload_extracted_preview: "Document Text Preview",
+    upload_demo_kevin_btn: "Use Real Demo Contract (Kevin Birowo Case)",
+    upload_scan_warning: "Ensure your PDF is text-based, not a photo or scanned image.",
+    
+    red_flag_title: "⚠️ Contract Red Flag: Resignation Penalty Exceeds Monthly Salary!",
+    red_flag_desc: "This agreement imposes a Resignation Penalty higher than your Monthly Salary during probation. This clause is considered disproportionate and exploitative under Indonesian labor regulations (Gov. Reg. 35/2021 jo. CC Decision 168/PUU-XXI/2023).",
+    red_flag_probation_note: "Note Article 58 Law 13/2003: Probation is strictly prohibited for fixed-term contracts (PKWT). If this is a PKWT, the probation and penalty are VOID BY LAW.",
+
+    chip_salary: "💬 What is the salary & payment schedule?",
+    chip_penalty: "⚠️ Is there a resignation penalty?",
+    chip_probation: "⏳ Is there a probation period?",
+    chip_hours: "🕒 What are the working hours?",
+
+    insight_salary_title: "Base Salary & Wage",
+    insight_hours_title: "Working Hours & Schedule",
+    insight_probation_title: "Probation / Notice",
+    insight_role_title: "Position & Employer",
+
+    legal_disclaimer_title: "Official Cek Kontrak Legal Disclaimer",
+    legal_disclaimer_body: "Cek Kontrak analysis is an AI-powered legal literacy tool referenced to Indonesian labor regulations (Law 13/2003, Law 6/2023, Gov. Reg. 35/2021, CC Decision 168/PUU-XXI/2023) and Civil Code Book III. This report is for educational purposes and is not a substitute for formal legal advice from a licensed attorney.",
+
+    delete_confirm_title: "Delete Contract Document?",
+    delete_confirm_desc: "Are you sure you want to delete this contract from your account? This action cannot be undone.",
+    delete_confirm_btn: "Yes, Delete Contract",
+    delete_cancel_btn: "Cancel",
+    delete_success: "Contract deleted successfully.",
+    delete_action_btn: "Delete",
+
+    compare_select_doc_a: "Select Document A",
+    compare_select_doc_b: "Select Document B",
+    compare_choose_existing: "Choose from My Contracts...",
+    compare_or_upload_new: "Or select/upload a new file",
+
+    auth_err_name_required: "Full name is required.",
+    auth_err_email_required: "Email address is required.",
+    auth_err_email_invalid: "Invalid email format (e.g. name@domain.com).",
+    auth_err_pass_required: "Password is required.",
+    auth_err_pass_length: "Password must be at least 6 characters.",
+
+    upload_docx_guidance: "For Word (.docx) files, please copy and paste the text into the 'Paste Contract Text' tab for instant analysis.",
+    upload_image_guidance: "Scanned image documents do not support auto-text extraction yet. Please use a text-based PDF or paste contract text.",
   },
 };

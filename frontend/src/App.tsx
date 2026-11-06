@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { translations, type Lang } from "./i18n"
 
-type IconName = "grid" | "file" | "compare" | "calendar" | "settings" | "search" | "bell" | "chevron" | "arrow" | "plus" | "upload" | "check" | "shield" | "spark" | "clock" | "close" | "menu" | "help" | "logout" | "chat" | "download" | "external" | "warning" | "send" | "lock" | "dots"
+type IconName = "grid" | "file" | "compare" | "calendar" | "settings" | "search" | "bell" | "chevron" | "arrow" | "plus" | "upload" | "check" | "shield" | "spark" | "clock" | "close" | "menu" | "help" | "logout" | "chat" | "download" | "external" | "warning" | "send" | "lock" | "dots" | "trash"
 function Icon({
   name,
   size = 20,
@@ -136,6 +136,11 @@ function Icon({
         <circle cx="19" cy="12" r="1" />
       </>
     ),
+    trash: (
+      <>
+        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />
+      </>
+    ),
   }
   return (
     <svg
@@ -156,7 +161,7 @@ function Icon({
 }
 function Logo({ onClick }: { onClick: () => void }) {
   return (
-    <button className="brand" onClick={onClick} aria-label="CLARIQ home">
+    <button className="brand" onClick={onClick} aria-label="Cek Kontrak home">
       <span className="brand-symbol">
         <svg width="25" height="29" viewBox="0 0 25 29" fill="none">
           <path
@@ -174,7 +179,7 @@ function Logo({ onClick }: { onClick: () => void }) {
           />
         </svg>
       </span>
-      CLARIQ<span className="brand-period">.</span>
+      Cek Kontrak<span className="brand-period">.</span>
     </button>
   )
 }
@@ -716,6 +721,45 @@ function DocumentArt({ lang = "id" }: { lang?: Lang }) {
   )
 }
 
+const KEVIN_BIROWO_CONTRACT = `Surat Kontrak Perjanjian Kerja
+Oleh PT. Bintang Maju Bersama
+SCBD Tower Alessia No.14 Lantai 6, Jakarta Pusat
+Nomor Kontrak: ARS1-12092020-BMB
+
+Bahwa saya yang bertanda tangan di bawah ini:
+Nama : Nana Pertiwi
+Alamat : Jl. Pantai Indah Kapuk No.14 Jakarta Utara
+Jabatan : HRD PT. Bintang Maju Bersama
+Akan disebut sebagai pihak pertama.
+
+Nama : Kevin Birowo
+Alamat : Jl. Bintan Nomor 29 Fatmawati, Jakarta Selatan
+Tempat dan Tanggal Lahir : Jakarta, 29 Januari 1985
+Jenis Kelamin : Pria
+Agama : Kristen
+Nomor KTP : 1982877718217
+Nomor Telepon : 0832-1193-8767
+Akan disebut sebagai pihak kedua.
+
+Pasal 1
+Saya sebagai pihak pertama menyatakan bahwa pihak kedua telah diangkat untuk bekerja sebagai karyawan di PT. Bintang Maju Bersama sebagai bagian Supply Chain Manager. Oleh sebab itulah dengan ditandatanganinya surat kontrak perjanjian kerja ini membuat ketentuan akan terus berlaku selama pihak kedua masih bekerja di perusahaan ini.
+
+Pasal 2
+Pihak kedua memiliki kewajiban untuk hadir mulai dari hari Senin hingga Jumat dan diharapkan kehadirannya paling lambat pukul 09.00 pagi hari dan akan bekerja hingga pukul 17.00 di sore hari.
+
+Pasal 3
+Pihak kedua akan bertanggung jawab untuk mengurus dan melakukan rekap penjualan serta membuat pemesanan produk-produk yang ada pada PT Bintang Maju Bersama. Rekap penjualan tersebut nantinya akan dikirimkan kepada Warehouse Chief untuk dibuatkan forecast penjualannya.
+
+Pasal 4
+Pihak kedua terlebih dahulu akan melewati masa uji coba selama satu bulan dan perusahaan akan menentukan diangkat secara penuh atau tidak sebagai karyawan tetap setelah pihak kedua melewati masa uji coba tersebut. Apabila karyawan mengundurkan diri selama masa uji coba sedang berlangsung maka akan dikenakan denda sebesar Rp10.000.000 untuk membayar biaya pelatihan yang sudah dilakukan.
+
+Pasal 5
+Selama pihak kedua bekerja di perusahaan akan berhak mendapatkan gaji sebesar Rp8.000.000 yang akan dibayarkan melalui nomor rekening yang sudah diberikan oleh perusahaan selambat-lambatnya pada tanggal 30 setiap bulannya.
+
+Demikianlah surat perjanjian kontrak kerja ini dibuat dan harap untuk diikuti sebaik-baiknya.
+Jakarta, 12 Desember 2020
+Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
+
 export default function App() {
   const [token, setToken] = useState<string>(() => localStorage.getItem("clariq_token") || "")
   const [page, setPage] = useState<Page>(() => {
@@ -747,6 +791,16 @@ export default function App() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadError, setUploadError] = useState("")
+  const [uploadContractType, setUploadContractType] = useState<"kerja" | "sewa">("kerja")
+  const [uploadMode, setUploadMode] = useState<"file" | "paste">("file")
+  const [uploadText, setUploadText] = useState("")
+  const [extractingPdf, setExtractingPdf] = useState(false)
+  const [extractedData, setExtractedData] = useState<{
+    text: string
+    numPages: number
+    charCount: number
+    wordCount: number
+  } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [clause, setClause] = useState<number | null>(null)
   const [original, setOriginal] = useState(false)
@@ -761,6 +815,9 @@ export default function App() {
   }[]>([])
   const [compareFiles, setCompareFiles] = useState<string[]>(["", ""])
   const [compared, setCompared] = useState(false)
+  const [compareData, setCompareData] = useState<any>(null)
+  const [compareIdA, setCompareIdA] = useState<number | string>("")
+  const [compareIdB, setCompareIdB] = useState<number | string>("")
   const [reminders, setReminders] = useState<number[]>([])
   const [dateMonth, setDateMonth] = useState(10)
   const [name, setName] = useState<string>(() => {
@@ -790,7 +847,11 @@ export default function App() {
 
   const fileInput = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
+  const backdropMouseDownRef = useRef<EventTarget | null>(null)
   const chatBottom = useRef<HTMLDivElement>(null)
+  const notificationsRef = useRef<HTMLDivElement>(null)
+  const profileRef = useRef<HTMLDivElement>(null)
+  const [contractToDelete, setContractToDelete] = useState<Contract | null>(null)
 
   const loadUserData = (authToken?: string) => {
     const activeToken = authToken || localStorage.getItem("clariq_token") || token
@@ -819,6 +880,8 @@ export default function App() {
           }))
           setContracts(enriched)
           setSelected(enriched.length > 0 ? enriched[0] : null)
+          setCompareIdA((prev) => prev || (enriched[0]?.id || 1))
+          setCompareIdB((prev) => prev || (enriched[1]?.id || enriched[0]?.id || 2))
         } else {
           setContracts([])
           setSelected(null)
@@ -836,22 +899,60 @@ export default function App() {
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
           setDates(json.data)
+          setReminders(
+            json.data
+              .filter((d: any) => d.reminderEnabled)
+              .map((d: any) => d.id)
+          )
         } else {
           setDates([])
+          setReminders([])
         }
       })
-      .catch(() => setDates([]))
+      .catch(() => {
+        setDates([])
+        setReminders([])
+      })
   }
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setAuthError("")
+
+    // 1. Validation for Register: Name
+    if (authModal === "register" && !authName.trim()) {
+      setAuthError(t.auth_err_name_required)
+      return
+    }
+
+    // 2. Email format validation
+    const emailClean = authEmail.trim()
+    if (!emailClean) {
+      setAuthError(t.auth_err_email_required)
+      return
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailClean)) {
+      setAuthError(t.auth_err_email_invalid)
+      return
+    }
+
+    // 3. Password validation
+    if (!authPassword) {
+      setAuthError(t.auth_err_pass_required)
+      return
+    }
+    if (authPassword.length < 6) {
+      setAuthError(t.auth_err_pass_length)
+      return
+    }
+
     setAuthLoading(true)
     const endpoint = authModal === "login" ? "/api/auth/login" : "/api/auth/register"
     const payload =
       authModal === "login"
-        ? { email: authEmail, password: authPassword }
-        : { name: authName, email: authEmail, password: authPassword }
+        ? { email: emailClean, password: authPassword }
+        : { name: authName.trim(), email: emailClean, password: authPassword }
 
     try {
       const res = await fetch(endpoint, {
@@ -882,12 +983,42 @@ export default function App() {
       setAuthPassword("")
       setAuthName("")
       loadUserData(data.token)
-      setToast(data.message || (lang === "id" ? "Selamat datang di CLARIQ!" : "Welcome to CLARIQ!"))
+      setToast(data.message || (lang === "id" ? "Selamat datang di Cek Kontrak!" : "Welcome to Cek Kontrak!"))
       navigate("dashboard")
     } catch {
       setAuthError("Gagal terhubung ke server backend.")
     } finally {
       setAuthLoading(false)
+    }
+  }
+
+  const handleDeleteContract = async (contract: Contract) => {
+    try {
+      const activeToken = localStorage.getItem("clariq_token") || token
+      const res = await fetch(`/api/contracts/${contract.id}`, {
+        method: "DELETE",
+        headers: {
+          ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+        },
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        setToast(data.message || (lang === "id" ? "Gagal menghapus kontrak." : "Failed to delete contract."))
+        return
+      }
+      setContracts((prev) => prev.filter((c) => c.id !== contract.id))
+      if (selected?.id === contract.id) {
+        const remaining = contracts.filter((c) => c.id !== contract.id)
+        setSelected(remaining[0] || null)
+        if (page === "analysis") {
+          navigate(remaining.length ? "analysis" : "contracts")
+        }
+      }
+      setContractToDelete(null)
+      setToast(t.delete_success)
+      loadUserData(activeToken)
+    } catch {
+      setToast(lang === "id" ? "Terjadi kesalahan saat menghapus kontrak." : "Error deleting contract.")
     }
   }
 
@@ -989,9 +1120,20 @@ export default function App() {
       pricing: "Pricing",
       landing: "Understand what you sign",
     }
-    document.title = `${titles[page]} · CLARIQ`
-    document.documentElement.lang = "en"
-  }, [page])
+    document.title = `${titles[page]} · Cek Kontrak`
+    document.documentElement.lang = lang
+
+    if (page === "compare" && !compareData) {
+      fetch("/api/contracts/compare")
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.data) {
+            setCompareData(json.data)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [page, lang, compareData])
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -1012,6 +1154,19 @@ export default function App() {
     window.addEventListener("keydown", onShortcut)
     return () => window.removeEventListener("keydown", onShortcut)
   }, [])
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (notifications && notificationsRef.current && !notificationsRef.current.contains(target)) {
+        setNotifications(false)
+      }
+      if (profile && profileRef.current && !profileRef.current.contains(target)) {
+        setProfile(false)
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick)
+    return () => document.removeEventListener("mousedown", handleOutsideClick)
+  }, [notifications, profile])
   useEffect(() => {
     const handler = () => {
       const hash = window.location.hash.slice(1) as Page
@@ -1105,11 +1260,11 @@ export default function App() {
   }
   const selectFile = (file?: File) => {
     if (!file) return
-    if (!/\.(pdf|docx|jpg|jpeg|png)$/i.test(file.name)) {
+    if (!/\.(pdf|docx|txt|jpg|jpeg|png)$/i.test(file.name)) {
       setUploadError(
         lang === "id"
-          ? "Silakan pilih dokumen dengan format PDF, DOCX, JPG, atau PNG."
-          : "Please choose a PDF, DOCX, JPG, or PNG document."
+          ? "Silakan pilih dokumen dengan format PDF, DOCX, TXT, JPG, atau PNG."
+          : "Please choose a PDF, DOCX, TXT, JPG, or PNG document."
       )
       return
     }
@@ -1123,6 +1278,75 @@ export default function App() {
     }
     setUploadFile(file)
     setUploadError("")
+    setExtractingPdf(true)
+    setExtractedData(null)
+
+    if (/\.txt$/i.test(file.name)) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const content = String(reader.result || "")
+        setExtractingPdf(false)
+        setExtractedData({
+          text: content,
+          numPages: 1,
+          charCount: content.length,
+          wordCount: content.split(/\s+/).filter(Boolean).length,
+        })
+        setUploadText(content)
+      }
+      reader.readAsText(file)
+    } else if (/\.pdf$/i.test(file.name)) {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        try {
+          const base64 = String(reader.result || "")
+          const res = await fetch("/api/extract-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ base64, fileName: file.name }),
+          })
+          const json = await res.json()
+          setExtractingPdf(false)
+          if (res.ok && json.success && json.data) {
+            setExtractedData(json.data)
+            setUploadText(json.data.text)
+          } else {
+            setUploadError(
+              json.message ||
+                (lang === "id"
+                  ? "Teks dokumen tidak terbaca atau PDF berupa scan gambar. Silakan tempel teks secara manual."
+                  : "Document text unreadable or scanned PDF. Please paste text manually.")
+            )
+          }
+        } catch {
+          setExtractingPdf(false)
+          setUploadError(
+            lang === "id"
+              ? "Gagal mengekstrak PDF. Silakan coba lagi atau gunakan mode tempel teks."
+              : "Failed to extract PDF. Please retry or paste text."
+          )
+        }
+      }
+      reader.readAsDataURL(file)
+    } else if (/\.docx$/i.test(file.name)) {
+      setExtractingPdf(false)
+      setUploadMode("paste")
+      setUploadError(
+        lang === "id"
+          ? "📄 Dokumen Word (.docx) terdeteksi. Silakan salin isi pasal kontrak Anda ke kolom di bawah ini untuk analisis AI langsung."
+          : "📄 Word document (.docx) detected. Please copy your contract clauses into the text box below for direct AI analysis."
+      )
+    } else if (/\.(jpe?g|png)$/i.test(file.name)) {
+      setExtractingPdf(false)
+      setUploadMode("paste")
+      setUploadError(
+        lang === "id"
+          ? "📷 Dokumen foto/scan belum mendukung ekstraksi teks otomatis. Silakan gunakan PDF berbasis teks atau salin isi kontrak ke tab ini."
+          : "📷 Image/photo scan does not support auto-extraction. Please use a text-based PDF or paste contract text into this tab."
+      )
+    } else {
+      setExtractingPdf(false)
+    }
   }
   const openUpload = () => {
     const savedToken = localStorage.getItem("clariq_token") || token
@@ -1136,11 +1360,39 @@ export default function App() {
       return
     }
     setUploadFile(null)
+    setUploadText("")
+    setExtractedData(null)
+    setExtractingPdf(false)
+    setUploadMode("file")
     setUploadError("")
     setUploadOpen(true)
   }
   const analyzeUpload = async () => {
-    if (!uploadFile) return
+    const isPaste = uploadMode === "paste"
+    const finalText = isPaste ? uploadText.trim() : (extractedData?.text?.trim() || uploadText.trim())
+
+    if (!finalText) {
+      setUploadError(
+        lang === "id"
+          ? "Teks dokumen tidak terbaca atau PDF berupa gambar scan. Silakan gunakan PDF berbasis teks atau tempel (paste) isi kontrak secara manual."
+          : "Document text is unreadable or PDF is a scanned image. Please use a text-based PDF or paste contract text manually."
+      )
+      return
+    }
+
+    const defaultTitle =
+      uploadContractType === "sewa"
+        ? lang === "id"
+          ? "Perjanjian Sewa Cek AI"
+          : "Rental Agreement AI Check"
+        : lang === "id"
+        ? "Perjanjian Kerja Cek AI"
+        : "Employment Agreement AI Check"
+
+    const docName = uploadFile?.name
+      ? uploadFile.name.replace(/\.[^.]+$/, "")
+      : defaultTitle
+
     try {
       const res = await fetch("/api/contracts", {
         method: "POST",
@@ -1149,41 +1401,42 @@ export default function App() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          name: uploadFile.name.replace(/\.[^.]+$/, ""),
-          fileName: uploadFile.name,
+          name: docName,
+          fileName: uploadFile?.name || (isPaste ? "contract-text.txt" : undefined),
+          contractType: uploadContractType,
+          contractText: finalText,
+          useAICheck: true,
+          lang,
         }),
       })
-      if (res.ok) {
-        const json = await res.json()
-        if (json.success && json.data) {
-          setContracts((prev) => [json.data, ...prev])
-          setSelected(json.data)
-          setUploadOpen(false)
-          navigate("analysis")
-          setToast(lang === "id" ? "Dokumen berhasil dianalisis oleh AI! Hasil telaah telah siap." : "Document analyzed successfully by AI!")
-          loadUserData(token)
-          return
-        }
+      const json = await res.json()
+      if (res.ok && json.success && json.data) {
+        setContracts((prev) => [json.data, ...prev])
+        setSelected(json.data)
+        setUploadOpen(false)
+        navigate("analysis")
+        setToast(
+          lang === "id"
+            ? "Dokumen berhasil dianalisis oleh AI! Hasil telaah telah siap."
+            : "Document analyzed successfully by AI!"
+        )
+        loadUserData(token)
+        return
+      } else {
+        setUploadError(
+          json.message ||
+            (lang === "id" ? "Gagal menganalisis dokumen." : "Failed to analyze document.")
+        )
+        return
       }
     } catch {
-      // Local fallback in case backend is offline
+      setUploadError(
+        lang === "id"
+          ? "Terjadi kesalahan jaringan atau server tidak dapat dihubungi. Silakan coba beberapa saat lagi."
+          : "Network error occurred or server unreachable. Please try again later."
+      )
+      return
     }
-    const item: Contract = {
-      id: Date.now(),
-      name: uploadFile.name.replace(/\.[^.]+$/, ""),
-      company: "Uploaded document · sample analysis",
-      type: "Other",
-      status: "Review",
-      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      color: "blue",
-    }
-    setContracts([item, ...contracts])
-    setSelected(item)
-    setUploadOpen(false)
-    navigate("analysis")
-    setToast(
-      "Document added. Showing sample analysis.",
-    )
   }
   const ask = async (text = question) => {
     if (!text.trim()) return
@@ -1198,6 +1451,7 @@ export default function App() {
         body: JSON.stringify({
           question: text,
           contractId: selected?.id || 1,
+          lang,
         }),
       })
       if (res.ok) {
@@ -1250,7 +1504,7 @@ export default function App() {
     } else if (!/resign|early|terminat|quit|keluar|mundur/i.test(text)) {
       answer =
         lang === "id"
-          ? "CLARIQ AI dapat menjelaskan klausul pembayaran, pengakhiran kontrak, perpanjangan otomatis, dan tanggung jawab kerja. Terkait pertanyaan Anda, pasal rujukan utama adalah Pasal 8: masing-masing pihak harus memberikan pemberitahuan tertulis 30 hari."
+          ? "AI Cek Kontrak dapat menjelaskan klausul pembayaran, pengakhiran kontrak, perpanjangan otomatis, dan tanggung jawab kerja. Terkait pertanyaan Anda, pasal rujukan utama adalah Pasal 8: masing-masing pihak harus memberikan pemberitahuan tertulis 30 hari."
           : "This prototype can explain the sample agreement’s payment, termination, renewal, and responsibilities clauses. For your question, the relevant starting point is Article 8: either party must give 30 days’ written notice to end the agreement."
     }
     setMessages((prev) => [
@@ -1357,16 +1611,30 @@ export default function App() {
                 </td>
                 <td className="date-cell">{getContractDate(c.dateId || c.date, lang)}</td>
                 <td>
-                  <button
-                    className="icon-button table-arrow"
-                    aria-label={`Open ${getContractName(c, lang)}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openContract(c)
-                    }}
-                  >
-                    <Icon name="chevron" size={17} />
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px" }}>
+                    <button
+                      className="icon-button"
+                      style={{ color: "#ef4444", padding: "6px", borderRadius: "6px" }}
+                      title={t.delete_action_btn}
+                      aria-label={`${t.delete_action_btn} ${getContractName(c, lang)}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setContractToDelete(c)
+                      }}
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                    <button
+                      className="icon-button table-arrow"
+                      aria-label={`Open ${getContractName(c, lang)}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openContract(c)
+                      }}
+                    >
+                      <Icon name="chevron" size={17} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1467,8 +1735,8 @@ export default function App() {
                 onClick={() =>
                   setToast(
                     lang === "id"
-                      ? "Butuh bantuan? Hubungi hello@clariq.example. Ini adalah demo resmi."
-                      : "Need a hand? Contact hello@clariq.example. This is a demo support address."
+                      ? "Butuh bantuan? Hubungi bantuan@cekkontrak.id. Layanan bantuan siap membantu."
+                      : "Need a hand? Contact support@cekkontrak.id. We are here to help."
                   )
                 }
               >
@@ -1477,7 +1745,7 @@ export default function App() {
                 <Icon name="external" size={14} />
               </button>
               <div className="sidebar-footer">
-                <span className="tiny-brand">CLARIQ</span>
+                <span className="tiny-brand">Cek Kontrak</span>
                 <span>{t.nav_footer_tagline}</span>
               </div>
             </div>
@@ -1641,7 +1909,7 @@ export default function App() {
                 />
                 <kbd>⌘ K</kbd>
               </div>
-              <div className="popover-container">
+              <div className="popover-container" ref={notificationsRef}>
                 <button
                   className={`icon-button notification-button ${
                     notifications ? "selected" : ""
@@ -1694,7 +1962,7 @@ export default function App() {
                 )}
               </div>
               <div className="header-divider" />
-              <div className="popover-container">
+              <div className="popover-container" ref={profileRef}>
                 <button
                   className="profile-button"
                   aria-label="Open profile menu"
@@ -1984,8 +2252,8 @@ export default function App() {
                   onClick={() =>
                     setToast(
                       lang === "id"
-                        ? "CLARIQ membantu menjelaskan dokumen. Konsultasikan dengan penasihat hukum profesional untuk kebutuhan kasus khusus Anda."
-                        : "CLARIQ helps explain documents. Consult a qualified legal professional for advice specific to your situation."
+                        ? "Cek Kontrak membantu menjelaskan dokumen. Konsultasikan dengan penasihat hukum profesional untuk kebutuhan kasus khusus Anda."
+                        : "Cek Kontrak helps explain documents. Consult a qualified legal professional for advice specific to your situation."
                     )
                   }
                 >
@@ -2102,15 +2370,25 @@ export default function App() {
                     <Badge status={lang === "id" ? "Analisis selesai" : "Analysis complete"} />
                   </div>
                 </div>
-                <Button
-                  onClick={() => {
-                    setMessages([])
-                    navigate("chat")
-                  }}
-                  icon="chat"
-                >
-                  {t.analysis_ask_btn}
-                </Button>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                  <Button
+                    onClick={() => {
+                      setMessages([])
+                      navigate("chat")
+                    }}
+                    icon="chat"
+                  >
+                    {t.analysis_ask_btn}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    icon="trash"
+                    style={{ color: "#dc2626", borderColor: "#fecaca" }}
+                    onClick={() => setContractToDelete(selected)}
+                  >
+                    {t.delete_action_btn}
+                  </Button>
+                </div>
               </div>
               <div className="sample-note">
                 <Icon name="spark" size={16} />
@@ -2118,6 +2396,28 @@ export default function App() {
                   {t.analysis_sample_note}
                 </span>
               </div>
+              {/* RED FLAG CALLOUT ALERT: Disproportionate Penalty / High Risk Trap */}
+              {(Boolean(selected.meta?.disproportionatePenalty) || Boolean(selected.meta?.penalty && selected.meta?.salaryNum && (selected.meta.penaltyNum ?? 0) >= selected.meta.salaryNum)) && (
+                <div className="red-flag-alert-box">
+                  <div className="red-flag-header">
+                    <Icon name="warning" size={22} />
+                    <h3>{t.red_flag_title}</h3>
+                  </div>
+                  <div className="red-flag-body">
+                    <p>
+                      {lang === "id"
+                        ? `Perjanjian ini membebankan Denda Resign (${selected.meta?.penalty || "Rp10.000.000"}) yang lebih besar dari Gaji Bulanan (${selected.meta?.salary || "Rp8.000.000"}) selama masa uji coba. Klausul ini berpotensi mengeksploitasi pekerja dan bertentangan dengan prinsip keadilan serta PP No. 35/2021 jo. Putusan MK No. 168/PUU-XXI/2023.`
+                        : `This agreement imposes a Resignation Penalty (${selected.meta?.penalty || "Rp10,000,000"}) higher than your Monthly Salary (${selected.meta?.salary || "Rp8,000,000"}) during probation. This clause is considered disproportionate and exploitative under Indonesian labor regulations.`}
+                    </p>
+                    {selected.meta?.probationPeriod && (
+                      <span className="red-flag-sub">
+                        {t.red_flag_probation_note}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <section className="summary-card">
                 <div className="summary-icon">
                   <Icon name="spark" size={24} />
@@ -2128,23 +2428,23 @@ export default function App() {
                     <span>{t.summary_tag}</span>
                   </div>
                   <p>
-                    {lang === "id" ? (
-                      selected.id === 1 || selected.id > 4
-                        ? "Ini adalah perjanjian kerja 12 bulan untuk peran Product Designer di PT Example Indonesia. Dokumen ini menetapkan gaji kotor bulanan Rp12.000.000, 40 jam kerja per minggu, dan masa pemberitahuan resign 30 hari. Sebagian besar ketentuan merupakan standar industri, namun klausul denda pengunduran diri dini dan perpanjangan otomatis layak dicermati lebih mendalam."
-                        : selected.id === 2
-                          ? "Perjanjian freelance ini bersama Studio XYZ mencakup proyek desain seharga Rp8.000.000 per bulan. Pembayaran jatuh tempo setiap tanggal 25. Periksa klausul perpanjangan otomatis dan berikan pemberitahuan tertulis sebelum 30 November 2027 jika tidak ingin memperpanjang."
-                          : selected.id === 3
-                            ? "Perjanjian vendor dengan Kopi Kita ini mencakup pasokan selama 12 bulan, termin pembayaran bulanan, dan tanggung jawab pengiriman barang yang jelas. Tidak ditemukan klausul berisiko tinggi."
-                            : "Perjanjian sewa apartemen di Bumi Residence mencakup masa sewa 12 bulan dengan uang jaminan (deposit) satu bulan sewa. Masa pemberitahuan pengakhiran sewa adalah 30 hari."
-                    ) : (
-                      selected.id === 1 || selected.id > 4
-                        ? "This is a 12-month employment agreement for a Product Designer role at PT Example Indonesia. It outlines a monthly salary of Rp12,000,000, a 40-hour work week, and a 30-day notice period. Most terms are standard, but early termination penalties and automatic renewal deserve a closer look."
-                        : selected.id === 2
-                          ? "This freelance agreement with Studio XYZ covers a design project at Rp8,000,000 per month. Payment is due on the 25th. Review the automatic renewal clause and give written notice before 30 November 2027 if you do not wish to continue."
-                          : selected.id === 3
-                            ? "This vendor agreement with Kopi Kita outlines a 12-month supply arrangement, monthly payments, and clearly defined delivery responsibilities. The sample terms are balanced, with no high-attention clauses identified."
-                            : "This apartment lease at Bumi Residence covers a 12-month rental term. Rent is paid monthly, a one-month security deposit is required, and both parties must give 30 days’ notice before termination."
-                    )}
+                    {selected.summary
+                      ? selected.summary
+                      : lang === "id"
+                        ? selected.id === 1
+                          ? "Ini adalah perjanjian kerja 12 bulan untuk peran Product Designer di PT Example Indonesia. Dokumen ini menetapkan gaji kotor bulanan Rp12.000.000, 40 jam kerja per minggu, dan masa pemberitahuan resign 30 hari. Sebagian besar ketentuan merupakan standar industri, namun klausul denda pengunduran diri dini dan perpanjangan otomatis layak dicermati lebih mendalam."
+                          : selected.id === 2
+                            ? "Perjanjian freelance ini bersama Studio XYZ mencakup proyek desain seharga Rp8.000.000 per bulan. Pembayaran jatuh tempo setiap tanggal 25. Periksa klausul perpanjangan otomatis dan berikan pemberitahuan tertulis sebelum 30 November 2027 jika tidak ingin memperpanjang."
+                            : selected.id === 3
+                              ? "Perjanjian vendor dengan Kopi Kita ini mencakup pasokan selama 12 bulan, termin pembayaran bulanan, dan tanggung jawab pengiriman barang yang jelas. Tidak ditemukan klausul berisiko tinggi."
+                              : "Perjanjian sewa apartemen di Bumi Residence mencakup masa sewa 12 bulan dengan uang jaminan (deposit) satu bulan sewa. Masa pemberitahuan pengakhiran sewa adalah 30 hari."
+                        : selected.id === 1
+                          ? "This is a 12-month employment agreement for a Product Designer role at PT Example Indonesia. It outlines a monthly salary of Rp12,000,000, a 40-hour work week, and a 30-day notice period. Most terms are standard, but early termination penalties and automatic renewal deserve a closer look."
+                          : selected.id === 2
+                            ? "This freelance agreement with Studio XYZ covers a design project at Rp8,000,000 per month. Payment is due on the 25th. Review the automatic renewal clause and give written notice before 30 November 2027 if you do not wish to continue."
+                            : selected.id === 3
+                              ? "This vendor agreement with Kopi Kita outlines a 12-month supply arrangement, monthly payments, and clearly defined delivery responsibilities. The sample terms are balanced, with no high-attention clauses identified."
+                              : "This apartment lease at Bumi Residence covers a 12-month rental term. Rent is paid monthly, a one-month security deposit is required, and both parties must give 30 days’ notice before termination."}
                   </p>
                   <span className="source-caption">
                     <Icon name="file" size={13} />
@@ -2155,28 +2455,28 @@ export default function App() {
               <div className="insight-grid">
                 {[
                   {
-                    icon: "calendar" as IconName,
-                    label: t.insight_duration,
-                    value: lang === "id" ? "12 bulan" : "12 months",
-                    sub: "13 Jan 2027 – 12 Jan 2028",
-                  },
-                  {
                     icon: "file" as IconName,
-                    label: t.insight_payment,
-                    value: "Rp12.000.000",
-                    sub: lang === "id" ? "Bulanan · Maks tgl 25" : "Monthly · Paid by the 25th",
+                    label: t.insight_salary_title,
+                    value: selected.meta?.salary || (lang === "id" ? "Rp8.000.000 / bln" : "Rp8,000,000 / mo"),
+                    sub: selected.meta?.paymentSchedule || (lang === "id" ? "Bulanan · Transfer bank" : "Monthly · Bank transfer"),
                   },
                   {
                     icon: "clock" as IconName,
-                    label: t.insight_notice,
-                    value: lang === "id" ? "30 hari" : "30 days",
-                    sub: lang === "id" ? "Pemberitahuan tertulis" : "Written notice required",
+                    label: t.insight_hours_title,
+                    value: selected.meta?.workingHours || (lang === "id" ? "Senin - Jumat (40 jam/minggu)" : "Mon - Fri (40 hrs/wk)"),
+                    sub: lang === "id" ? "Sesuai Pasal 77 UU 13/2003" : "Complies with Art. 77 Law 13/2003",
+                  },
+                  {
+                    icon: "shield" as IconName,
+                    label: t.insight_probation_title,
+                    value: selected.meta?.probationPeriod || selected.meta?.noticePeriod || (lang === "id" ? "30 hari" : "30 days"),
+                    sub: selected.meta?.noticePeriod ? `${lang === "id" ? "Notice" : "Notice"}: ${selected.meta.noticePeriod}` : (lang === "id" ? "Masa percobaan kerja" : "Probation period"),
                   },
                   {
                     icon: "calendar" as IconName,
-                    label: t.insight_renewal,
-                    value: lang === "id" ? "12 Des 2027" : "12 Dec 2027",
-                    sub: lang === "id" ? "Batas perpanjangan kontrak" : "Next renewal deadline",
+                    label: t.insight_role_title,
+                    value: selected.meta?.role || selected.type || (lang === "id" ? "Karyawan" : "Employee"),
+                    sub: selected.meta?.company || selected.company || (lang === "id" ? "Perusahaan" : "Company"),
                   },
                 ].map((item) => (
                   <div className="surface insight-card" key={item.label}>
@@ -2194,27 +2494,43 @@ export default function App() {
                   title={t.risk_title}
                   subtitle={t.risk_sub}
                 >
-                  <span className="muted-label">{t.risk_clauses_count}</span>
+                  <span className="muted-label">{activeClauses.length} {t.risk_clauses_count}</span>
                 </SectionTitle>
-                <div className="risk-bar">
-                  <span className="risk-safe" />
-                  <span className="risk-review" />
-                  <span className="risk-attention" />
-                </div>
-                <div className="risk-legend">
-                  <span>
-                    <i className="mint-bg" />
-                    <b>8</b> {t.risk_safe_label}
-                  </span>
-                  <span>
-                    <i className="amber-bg" />
-                    <b>3</b> {t.risk_review_label}
-                  </span>
-                  <span>
-                    <i className="coral-bg" />
-                    <b>1</b> {t.risk_attention_label}
-                  </span>
-                </div>
+                {(() => {
+                  const safeCount = selected.riskBreakdown?.safe ?? (activeClauses.filter((c) => /safe|aman/i.test(c.status || c.statusId || "")).length || 0)
+                  const reviewCount = selected.riskBreakdown?.review ?? (activeClauses.filter((c) => /review|tinjau/i.test(c.status || c.statusId || "")).length || 0)
+                  const attentionCount = selected.riskBreakdown?.attention ?? (activeClauses.filter((c) => /attention|perhatian/i.test(c.status || c.statusId || "")).length || 0)
+                  const totalClauses = Math.max(1, safeCount + reviewCount + attentionCount)
+                  return (
+                    <>
+                      <div className="risk-bar" style={{ display: "flex", gap: "3px", borderRadius: "8px", overflow: "hidden", background: "#f1f5f9" }}>
+                        {safeCount > 0 && (
+                          <span className="risk-safe" style={{ width: `${(safeCount / totalClauses) * 100}%` }} />
+                        )}
+                        {reviewCount > 0 && (
+                          <span className="risk-review" style={{ width: `${(reviewCount / totalClauses) * 100}%` }} />
+                        )}
+                        {attentionCount > 0 && (
+                          <span className="risk-attention" style={{ width: `${(attentionCount / totalClauses) * 100}%` }} />
+                        )}
+                      </div>
+                      <div className="risk-legend">
+                        <span>
+                          <i className="mint-bg" />
+                          <b>{safeCount}</b> {t.risk_safe_label}
+                        </span>
+                        <span>
+                          <i className="amber-bg" />
+                          <b>{reviewCount}</b> {t.risk_review_label}
+                        </span>
+                        <span>
+                          <i className="coral-bg" />
+                          <b>{attentionCount}</b> {t.risk_attention_label}
+                        </span>
+                      </div>
+                    </>
+                  )
+                })()}
               </section>
               <section className="surface clauses-section">
                 <SectionTitle
@@ -2257,9 +2573,12 @@ export default function App() {
                   </button>
                 ))}
               </section>
-              <div className="legal-note">
-                <Icon name="shield" size={16} />
-                {t.clause_legal_disclaimer}
+              <div className="legal-disclaimer-banner">
+                <Icon name="shield" size={22} />
+                <div>
+                  <strong>{t.legal_disclaimer_title}</strong>
+                  <p>{t.legal_disclaimer_body}</p>
+                </div>
               </div>
             </>
             )
@@ -2366,7 +2685,7 @@ export default function App() {
                         <div>
                           <span className="message-author">
                             {m.role === "assistant"
-                              ? "CLARIQ AI"
+                              ? "AI Cek Kontrak"
                               : name.split(" ")[0]}
                             {m.role === "assistant" && (
                               <small>{lang === "id" ? "AI · SIMULASI" : "AI · SAMPLE"}</small>
@@ -2398,6 +2717,23 @@ export default function App() {
                     ))
                   )}
                   <div ref={chatBottom} />
+                </div>
+                <div className="quick-chips-container" role="group" aria-label="Quick questions">
+                  {[
+                    { text: lang === "id" ? "Berapa gaji & kapan dibayar?" : "What is the salary & payment schedule?", label: t.chip_salary },
+                    { text: lang === "id" ? "Apakah ada denda jika resign?" : "Is there a resignation penalty?", label: t.chip_penalty },
+                    { text: lang === "id" ? "Apakah ada masa uji coba?" : "Is there a probation period?", label: t.chip_probation },
+                    { text: lang === "id" ? "Bagaimana aturan jam kerjanya?" : "What are the working hours?", label: t.chip_hours },
+                  ].map((chip) => (
+                    <button
+                      key={chip.text}
+                      type="button"
+                      className="quick-chip-btn"
+                      onClick={() => ask(chip.text)}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
                 </div>
                 <form
                   className="chat-input-wrap"
@@ -2432,6 +2768,10 @@ export default function App() {
             )
           )}
           {page === "compare" && (
+            (() => {
+              const contractA = contracts.find((c) => String(c.id) === String(compareIdA)) || contracts[0]
+              const contractB = contracts.find((c) => String(c.id) === String(compareIdB)) || contracts[1] || contracts[0]
+              return (
             <>
               <div className="page-heading">
                 <div>
@@ -2443,19 +2783,86 @@ export default function App() {
                 </div>
                 <Button
                   icon="compare"
-                  disabled={compareFiles.some((f) => !f)}
+                  disabled={!contractA && !contractB && compareFiles.some((f) => !f)}
                   onClick={() => {
                     setCompared(true)
+                    if (!compareData) {
+                      fetch("/api/contracts/compare")
+                        .then((res) => res.json())
+                        .then((json) => {
+                          if (json.success && json.data) setCompareData(json.data)
+                        })
+                        .catch(() => {})
+                    }
                     setToast(
                       lang === "id"
-                        ? "Perbandingan percontohan siap ditinjau. Isi file tidak dikirim ke pihak luar."
-                        : "Sample comparison ready. File contents are not processed in this prototype."
+                        ? "Perbandingan klausul siap ditinjau dengan analisis AI."
+                        : "Clause comparison ready with AI analysis."
                     )
                   }}
                 >
                   {t.compare_btn}
                 </Button>
               </div>
+
+              {/* Dynamic Contract Selector Row */}
+              {contracts.length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "20px" }}>
+                  <div className="surface" style={{ padding: "14px 18px", borderRadius: "10px" }}>
+                    <label style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                      <span className="comparison-dot blue-bg" />
+                      {t.compare_select_doc_a}
+                    </label>
+                    <select
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: "7px", border: "1px solid var(--border)", fontSize: "12px", fontWeight: 600, color: "var(--color-navy)", background: "white", outline: "none", cursor: "pointer" }}
+                      value={compareIdA || contracts[0]?.id}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setCompareIdA(val)
+                        const c = contracts.find((item) => String(item.id) === String(val))
+                        if (c) {
+                          const next = [...compareFiles]
+                          next[0] = c.name
+                          setCompareFiles(next)
+                        }
+                      }}
+                    >
+                      {contracts.map((c) => (
+                        <option key={`opt-a-${c.id}`} value={c.id}>
+                          {getContractName(c, lang)} ({c.company})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="surface" style={{ padding: "14px 18px", borderRadius: "10px" }}>
+                    <label style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                      <span className="comparison-dot mint-bg" />
+                      {t.compare_select_doc_b}
+                    </label>
+                    <select
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: "7px", border: "1px solid var(--border)", fontSize: "12px", fontWeight: 600, color: "var(--color-navy)", background: "white", outline: "none", cursor: "pointer" }}
+                      value={compareIdB || (contracts[1]?.id || contracts[0]?.id)}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setCompareIdB(val)
+                        const c = contracts.find((item) => String(item.id) === String(val))
+                        if (c) {
+                          const next = [...compareFiles]
+                          next[1] = c.name
+                          setCompareFiles(next)
+                        }
+                      }}
+                    >
+                      {contracts.map((c) => (
+                        <option key={`opt-b-${c.id}`} value={c.id}>
+                          {getContractName(c, lang)} ({c.company})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
               <div className="compare-upload-grid">
                 {[t.compare_doc_a, t.compare_doc_b].map((label, i) => (
                   <label className="surface compare-upload" key={label}>
@@ -2467,14 +2874,12 @@ export default function App() {
                       <Icon name="file" size={23} />
                     </span>
                     <b>
-                      {compareFiles[i] === "Employment Agreement.pdf" && lang === "id"
-                        ? "Perjanjian Kerja.pdf"
-                        : compareFiles[i] === "Employment Agreement — revised.pdf" && lang === "id"
-                          ? "Perjanjian Kerja — revisi.pdf"
-                          : compareFiles[i] || t.compare_choose_doc}
+                      {i === 0
+                        ? (contractA ? getContractName(contractA, lang) : compareFiles[0] || t.compare_choose_doc)
+                        : (contractB ? getContractName(contractB, lang) : compareFiles[1] || t.compare_choose_doc)}
                     </b>
                     <span className="text-link">
-                      {compareFiles[i] ? t.compare_replace_doc : t.compare_upload_doc}
+                      {t.compare_or_upload_new}
                       <Icon name="upload" size={14} />
                     </span>
                     <input
@@ -2515,61 +2920,77 @@ export default function App() {
                             <th>{t.compare_category}</th>
                             <th>
                               <span className="comparison-dot blue-bg" />
-                              {t.compare_doc_a}
+                              {contractA ? getContractName(contractA, lang) : t.compare_doc_a}
                             </th>
                             <th>
                               <span className="comparison-dot mint-bg" />
-                              {t.compare_doc_b}
+                              {contractB ? getContractName(contractB, lang) : t.compare_doc_b}
                             </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {[
-                            [lang === "id" ? "Durasi" : "Duration", lang === "id" ? "12 bulan" : "12 months", lang === "id" ? "12 bulan" : "12 months"],
-                            [
-                              lang === "id" ? "Gaji / Kompensasi" : "Payment",
-                              lang === "id" ? "Rp12.000.000 / bulan" : "Rp12,000,000 / month",
-                              lang === "id" ? "Rp14.000.000 / bulan" : "Rp14,000,000 / month",
-                            ],
-                            [lang === "id" ? "Masa Pemberitahuan" : "Notice Period", lang === "id" ? "30 hari" : "30 days", lang === "id" ? "60 hari" : "60 days"],
-                            [
-                              lang === "id" ? "Perpanjangan" : "Renewal",
-                              lang === "id" ? "Otomatis · 12 bulan" : "Automatic · 12 months",
-                              lang === "id" ? "Otomatis · 12 bulan" : "Automatic · 12 months",
-                            ],
-                            [
-                              lang === "id" ? "Pengakhiran Kontrak" : "Termination",
-                              lang === "id" ? "Pemberitahuan tertulis 30 hari" : "30 days’ written notice",
-                              lang === "id" ? "Pemberitahuan tertulis 60 hari" : "60 days’ written notice",
-                            ],
-                            [
-                              lang === "id" ? "Denda Resign Dini" : "Penalty",
-                              lang === "id" ? "1 bulan gaji kotor" : "One month’s gross salary",
-                              lang === "id" ? "Tanpa denda pinalti" : "No early termination penalty",
-                            ],
-                            [
-                              lang === "id" ? "Tanggung Jawab" : "Responsibilities",
-                              lang === "id" ? "Product Designer · 40 jam/minggu" : "Product Designer · 40 hrs/week",
-                              lang === "id" ? "Product Designer · 40 jam/minggu" : "Product Designer · 40 hrs/week",
-                            ],
-                          ].map(([label, a, b]) => (
-                            <tr
-                              key={label}
-                              className={a !== b ? "difference-row" : ""}
-                            >
-                              <th>
-                                {label}
-                                {a !== b && <span className="difference-dot" />}
-                              </th>
-                              <td>{a}</td>
-                              <td>
-                                {b}
-                                {(label.includes("Penalty") || label.includes("Denda")) && (
-                                  <Icon name="check" size={16} />
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                          {(() => {
+                            const metaA = contractA?.meta as Record<string, string> | undefined
+                            const metaB = contractB?.meta as Record<string, string> | undefined
+                            return [
+                              [
+                                lang === "id" ? "Durasi Kontrak" : "Duration",
+                                metaA?.duration || metaA?.expiryDate || (lang === "id" ? "12 bulan" : "12 months"),
+                                metaB?.duration || metaB?.expiryDate || (lang === "id" ? "12 bulan" : "12 months"),
+                              ],
+                              [
+                                lang === "id" ? "Gaji / Kompensasi" : "Payment",
+                                metaA?.salary || (lang === "id" ? "Rp12.000.000 / bulan" : "Rp12,000,000 / month"),
+                                metaB?.salary || (lang === "id" ? "Rp14.000.000 / bulan" : "Rp14,000,000 / month"),
+                              ],
+                              [
+                                lang === "id" ? "Masa Pemberitahuan" : "Notice Period",
+                                metaA?.noticePeriod || (lang === "id" ? "30 hari" : "30 days"),
+                                metaB?.noticePeriod || (lang === "id" ? "60 hari" : "60 days"),
+                              ],
+                              [
+                                lang === "id" ? "Perpanjangan" : "Renewal",
+                                metaA?.renewal || (lang === "id" ? "Otomatis · 12 bulan" : "Automatic · 12 months"),
+                                metaB?.renewal || (lang === "id" ? "Otomatis · 12 bulan" : "Automatic · 12 months"),
+                              ],
+                              [
+                                lang === "id" ? "Pengakhiran Kontrak" : "Termination",
+                                metaA?.noticePeriod
+                                  ? (lang === "id" ? `Pemberitahuan tertulis ${metaA.noticePeriod}` : `${metaA.noticePeriod} written notice`)
+                                  : (lang === "id" ? "Pemberitahuan tertulis 30 hari" : "30 days’ written notice"),
+                                metaB?.noticePeriod
+                                  ? (lang === "id" ? `Pemberitahuan tertulis ${metaB.noticePeriod}` : `${metaB.noticePeriod} written notice`)
+                                  : (lang === "id" ? "Pemberitahuan tertulis 60 hari" : "60 days’ written notice"),
+                              ],
+                              [
+                                lang === "id" ? "Denda Resign Dini" : "Penalty",
+                                metaA?.dendaResign || (lang === "id" ? "1 bulan gaji kotor" : "One month’s gross salary"),
+                                metaB?.dendaResign || (lang === "id" ? "Tanpa denda pinalti" : "No early termination penalty"),
+                              ],
+                              [
+                                lang === "id" ? "Jam Kerja / Tanggung Jawab" : "Schedule / Responsibilities",
+                                metaA?.workingHours || (lang === "id" ? "40 jam/minggu" : "40 hrs/week"),
+                                metaB?.workingHours || (lang === "id" ? "40 jam/minggu" : "40 hrs/week"),
+                              ],
+                            ].map(([label, a, b]) => (
+                              <tr
+                                key={label}
+                                className={a !== b ? "difference-row" : ""}
+                              >
+                                <th>
+                                  {label}
+                                  {a !== b && <span className="difference-dot" />}
+                                </th>
+                                <td>{a}</td>
+                                <td>
+                                  {b}
+                                  {(label.includes("Penalty") || label.includes("Denda")) && (
+                                    <Icon name="check" size={16} />
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -2623,7 +3044,8 @@ export default function App() {
                 {t.compare_legal_note}
               </div>
             </>
-          )}
+            )
+          })())}
           {page === "dates" && (
             <>
               <div className="page-heading">
@@ -2692,26 +3114,46 @@ export default function App() {
                               <Badge status={lang === "id" ? (item.tagId || item.tag) : item.tag} />
                               <button
                                 className={`reminder-button ${
-                                  reminders.includes(i) ? "enabled" : ""
+                                  reminders.includes(item.id) ? "enabled" : ""
                                 }`}
                                 onClick={() => {
-                                  setReminders(
-                                    reminders.includes(i)
-                                      ? reminders.filter((n) => n !== i)
-                                      : [...reminders, i],
-                                  )
+                                  const dateId = item.id
+                                  const isCurrentlySet = reminders.includes(dateId)
+                                  const nextReminders = isCurrentlySet
+                                    ? reminders.filter((id) => id !== dateId)
+                                    : [...reminders, dateId]
+                                  setReminders(nextReminders)
+
+                                  const activeToken = localStorage.getItem("clariq_token") || token
+                                  fetch(`/api/dates/${dateId}/reminder`, {
+                                    method: "PUT",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                      ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+                                    },
+                                  })
+                                    .then((res) => res.json())
+                                    .then((data) => {
+                                      if (data.success && data.data) {
+                                        setDates((prev) =>
+                                          prev.map((d) => (d.id === dateId ? { ...d, reminderEnabled: data.data.reminderEnabled } : d))
+                                        )
+                                      }
+                                    })
+                                    .catch(() => {})
+
                                   setToast(
-                                    reminders.includes(i)
-                                      ? (lang === "id" ? "Pengingat dihapus untuk sesi ini." : "Reminder removed for this session.")
-                                      : (lang === "id" ? "Pengingat berhasil dipasang." : "Demo reminder saved. No email or notification will be sent.")
+                                    isCurrentlySet
+                                      ? (lang === "id" ? "Pengingat dinonaktifkan." : "Reminder disabled.")
+                                      : (lang === "id" ? "Pengingat berhasil diaktifkan dan disimpan ke database!" : "Reminder saved to database!")
                                   )
                                 }}
                               >
                                 <Icon
-                                  name={reminders.includes(i) ? "check" : "bell"}
+                                  name={reminders.includes(item.id) ? "check" : "bell"}
                                   size={13}
                                 />
-                                {reminders.includes(i)
+                                {reminders.includes(item.id)
                                   ? t.dates_reminder_set
                                   : t.dates_set_reminder}
                               </button>
@@ -2779,41 +3221,53 @@ export default function App() {
                       )}
                       {Array.from(
                         { length: new Date(2027, dateMonth + 1, 0).getDate() },
-                        (_, i) => (
-                          <button
-                            key={i}
-                            className={`${
-                              dateMonth === 10 && i === 11 ? "today" : ""
-                            } ${
-                              dates.length > 0 &&
-                              ((dateMonth === 10 && [24, 29].includes(i)) ||
-                              (dateMonth === 11 && i === 11))
-                                ? "has-event"
-                                : ""
-                            }`}
-                            onClick={() =>
-                              setToast(
-                                `${i + 1} ${
-                                  dateMonth === 10
-                                    ? (lang === "id" ? "November" : "November")
-                                    : dateMonth === 11
-                                      ? (lang === "id" ? "Desember" : "December")
-                                      : (lang === "id" ? "bulan ini" : "of this month")
-                                } 2027: ${
-                                  dates.length > 0 && dateMonth === 10 && i === 24
-                                    ? (lang === "id" ? "Jatuh tempo pembayaran gaji bulanan." : "Monthly payment due.")
-                                    : dates.length > 0 && dateMonth === 10 && i === 29
-                                      ? (lang === "id" ? "Batas akhir pemberitahuan kontrak freelance." : "Freelance notice deadline.")
-                                      : dates.length > 0 && dateMonth === 11 && i === 11
-                                        ? (lang === "id" ? "Batas akhir perpanjangan kontrak kerja." : "Employment renewal deadline.")
-                                        : (lang === "id" ? "Tidak ada tenggat waktu dokumen." : "No contract milestones.")
-                                }`,
-                              )
-                            }
-                          >
-                            {i + 1}
-                          </button>
-                        ),
+                        (_, i) => {
+                          const dayNum = i + 1
+                          const monthMap: Record<string, number> = {
+                            JAN: 0, FEB: 1, MAR: 2, APR: 3, MEI: 4, MAY: 4,
+                            JUN: 5, JUL: 6, AGU: 7, AUG: 7, SEP: 8, OKT: 9,
+                            OCT: 9, NOV: 10, DES: 11, DEC: 11,
+                          }
+                          const matchingDate = dates.find((d) => {
+                            const dMonth = monthMap[(d.month || "").toUpperCase()]
+                            return dMonth === dateMonth && parseInt(d.day, 10) === dayNum
+                          })
+                          const isToday = dateMonth === 10 && dayNum === 12
+                          const monthName = lang === "id"
+                            ? [
+                                "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+                              ][dateMonth]
+                            : [
+                                "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
+                              ][dateMonth]
+                          const eventTitle = matchingDate
+                            ? (lang === "id" ? (matchingDate.titleId || matchingDate.title) : (matchingDate.title || matchingDate.titleId))
+                            : null
+                          const contractName = matchingDate ? (matchingDate.contract || matchingDate.contractName || "") : ""
+
+                          return (
+                            <button
+                              key={i}
+                              className={`${isToday ? "today" : ""} ${matchingDate ? "has-event" : ""}`}
+                              title={matchingDate ? `${eventTitle}${contractName ? ` (${contractName})` : ""}` : undefined}
+                              onClick={() => {
+                                if (matchingDate) {
+                                  setToast(
+                                    `${dayNum} ${monthName} 2027: ${eventTitle}${contractName ? ` (${contractName})` : ""}`
+                                  )
+                                } else {
+                                  setToast(
+                                    lang === "id"
+                                      ? `${dayNum} ${monthName} 2027: Tidak ada tenggat waktu dokumen.`
+                                      : `${dayNum} ${monthName} 2027: No contract milestones.`
+                                  )
+                                }
+                              }}
+                            >
+                              {dayNum}
+                            </button>
+                          )
+                        },
                       )}
                     </div>
                     <div className="calendar-legend">
@@ -2854,24 +3308,28 @@ export default function App() {
               </div>
               <form
                 className="surface settings-card"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault()
-                  fetch("/api/user", {
-                    method: "PUT",
-                    headers: {
-                      "Content-Type": "application/json",
-                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    },
-                    body: JSON.stringify({ name, email, emailReminders, plan }),
-                  })
-                    .then(() => {
-                      if (name) localStorage.setItem("clariq_name", name)
-                      if (email) localStorage.setItem("clariq_email", email)
-                      setToast(lang === "id" ? "Pengaturan berhasil disimpan ke database CLARIQ!" : "Your preferences have been saved.")
+                  try {
+                    const res = await fetch("/api/user", {
+                      method: "PUT",
+                      headers: {
+                        "Content-Type": "application/json",
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                      },
+                      body: JSON.stringify({ name, email, emailReminders, plan }),
                     })
-                    .catch(() => {
-                      setToast(lang === "id" ? "Pengaturan tersimpan." : "Your preferences have been saved.")
-                    })
+                    const data = await res.json()
+                    if (!res.ok || !data.success) {
+                      setToast(data.message || (lang === "id" ? "Gagal menyimpan pengaturan profil." : "Failed to save profile settings."))
+                      return
+                    }
+                    if (name) localStorage.setItem("clariq_name", name)
+                    if (email) localStorage.setItem("clariq_email", email)
+                    setToast(lang === "id" ? "Pengaturan berhasil disimpan ke database Cek Kontrak!" : "Your preferences have been saved.")
+                  } catch {
+                    setToast(lang === "id" ? "Terjadi kesalahan jaringan saat menyimpan profil." : "Network error saving profile.")
+                  }
                 }}
               >
                 <SectionTitle
@@ -3272,7 +3730,7 @@ export default function App() {
               <footer className="landing-footer">
                 <Logo onClick={() => navigate("landing")} />
                 <span>{t.nav_footer_tagline}</span>
-                <span>© 2027 CLARIQ. {lang === "id" ? "Langkah cerdas memahami perjanjian." : "A clearer way forward."}</span>
+                <span>© 2027 Cek Kontrak. {lang === "id" ? "Langkah cerdas memahami perjanjian." : "A clearer way forward."}</span>
                 <button onClick={() => navigate("pricing")}>
                   {t.breadcrumb_pricing}
                 </button>
@@ -3282,25 +3740,33 @@ export default function App() {
         </main>
       </div>
       {toast && (
-        <div className="toast" role="status">
-          <span>
-            <Icon name="check" size={18} />
-          </span>
-          <p>{toast}</p>
-          <button
-            className="icon-button"
-            onClick={() => setToast("")}
-            aria-label="Dismiss notification"
-          >
-            <Icon name="close" size={16} />
-          </button>
+        <div className="toast-wrapper">
+          <div className="toast" role="status">
+            <span>
+              <Icon name="check" size={18} />
+            </span>
+            <p>{toast}</p>
+            <button
+              className="icon-button"
+              onClick={() => setToast("")}
+              aria-label="Dismiss notification"
+            >
+              <Icon name="close" size={16} />
+            </button>
+          </div>
         </div>
       )}
       {uploadOpen && (
         <div
           className="modal-backdrop"
+          onMouseDown={(e) => {
+            backdropMouseDownRef.current = e.target
+          }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) setUploadOpen(false)
+            if (e.target === e.currentTarget && backdropMouseDownRef.current === e.currentTarget) {
+              setUploadOpen(false)
+            }
+            backdropMouseDownRef.current = null
           }}
         >
           <div
@@ -3309,6 +3775,8 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="upload-title"
             ref={modalRef}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-heading">
               <span className="stat-icon blue">
@@ -3326,46 +3794,178 @@ export default function App() {
             <p className="modal-subtitle">
               {t.upload_modal_sub}
             </p>
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".pdf,.docx,.jpg,.jpeg,.png"
-              className="sr-only"
-              onChange={(e) => selectFile(e.target.files?.[0])}
-            />
+
+            {/* Pilihan Grounding Hukum & Kategori */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", margin: "14px 0 10px", width: "100%" }}>
+              <button
+                type="button"
+                className={`btn btn-${uploadContractType === "kerja" ? "primary" : "secondary"}`}
+                style={{ flex: "1 1 200px", minWidth: 0, fontSize: "0.82rem", padding: "8px 10px", minHeight: "36px", whiteSpace: "normal", textAlign: "center", lineHeight: "1.3" }}
+                onClick={() => setUploadContractType("kerja")}
+              >
+                {lang === "id" ? "⚖️ Ketenagakerjaan (UU 13/2003)" : "⚖️ Employment"}
+              </button>
+              <button
+                type="button"
+                className={`btn btn-${uploadContractType === "sewa" ? "primary" : "secondary"}`}
+                style={{ flex: "1 1 200px", minWidth: 0, fontSize: "0.82rem", padding: "8px 10px", minHeight: "36px", whiteSpace: "normal", textAlign: "center", lineHeight: "1.3" }}
+                onClick={() => setUploadContractType("sewa")}
+              >
+                {lang === "id" ? "🏠 Sewa Menyewa (KUHPerdata)" : "🏠 Rental Lease"}
+              </button>
+            </div>
+
+            {/* Mode Switch: File vs Paste */}
+            <div style={{ display: "flex", flexWrap: "wrap", borderBottom: "1px solid var(--border)", marginBottom: "14px", width: "100%" }}>
+              <button
+                type="button"
+                style={{
+                  flex: "1 1 180px",
+                  minWidth: 0,
+                  padding: "8px 10px",
+                  fontSize: "0.83rem",
+                  fontWeight: uploadMode === "file" ? 700 : 500,
+                  borderBottom: uploadMode === "file" ? "2px solid var(--color-clarity)" : "none",
+                  color: uploadMode === "file" ? "var(--color-clarity)" : "var(--muted)",
+                  whiteSpace: "normal",
+                  textAlign: "center",
+                  lineHeight: "1.3",
+                }}
+                onClick={() => setUploadMode("file")}
+              >
+                {lang === "id" ? "Unggah Dokumen (PDF/DOCX/Gambar)" : "Upload Document"}
+              </button>
+              <button
+                type="button"
+                style={{
+                  flex: "1 1 180px",
+                  minWidth: 0,
+                  padding: "8px 10px",
+                  fontSize: "0.83rem",
+                  fontWeight: uploadMode === "paste" ? 700 : 500,
+                  borderBottom: uploadMode === "paste" ? "2px solid var(--color-clarity)" : "none",
+                  color: uploadMode === "paste" ? "var(--color-clarity)" : "var(--muted)",
+                  whiteSpace: "normal",
+                  textAlign: "center",
+                  lineHeight: "1.3",
+                }}
+                onClick={() => setUploadMode("paste")}
+              >
+                {lang === "id" ? "Tempel Teks Pasal (Paste)" : "Paste Contract Text"}
+              </button>
+            </div>
+
+            {uploadMode === "paste" ? (
+              <div style={{ marginBottom: "14px" }}>
+                <textarea
+                  style={{
+                    width: "100%",
+                    minHeight: "120px",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    fontSize: "0.85rem",
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                    background: "white",
+                  }}
+                  placeholder={
+                    uploadContractType === "kerja"
+                      ? (lang === "id"
+                          ? "Tempel teks pasal kontrak kerja di sini (contoh: 'Karyawan yang mengundurkan diri sebelum masa kontrak berakhir wajib membayar denda 3x gaji bulanan. Kontrak otomatis diperpanjang...')"
+                          : "Paste employment contract text here (e.g. 'Employee resigning before end of contract shall pay 3x monthly salary penalty. Contract renews automatically...')")
+                      : (lang === "id"
+                          ? "Tempel teks perjanjian sewa di sini (contoh: 'Uang deposit tidak dapat dikembalikan dengan alasan apapun. Pemilik berhak menaikkan harga sewa kapan saja...')"
+                          : "Paste lease agreement text here (e.g. 'Security deposit non-refundable. Owner reserves right to increase rent unilaterally...')")
+                  }
+                  value={uploadText}
+                  onChange={(e) => setUploadText(e.target.value)}
+                />
+              </div>
+            ) : (
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept=".pdf,.docx,.jpg,.jpeg,.png"
+                  className="sr-only"
+                  onChange={(e) => selectFile(e.target.files?.[0])}
+                />
+                <button
+                  className={`drop-zone ${dragging ? "dragging" : ""} ${
+                    uploadFile ? "has-file" : ""
+                  }`}
+                  onClick={() => fileInput.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setDragging(true)
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setDragging(false)
+                    selectFile(e.dataTransfer.files[0])
+                  }}
+                >
+                  <span className="upload-circle">
+                    <Icon name={uploadFile ? "file" : "upload"} size={28} />
+                  </span>
+                  <h3>
+                    {uploadFile ? uploadFile.name : t.landing_drop_title}
+                  </h3>
+                  <p>
+                    {uploadFile ? (
+                      `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB · ${lang === "id" ? "Klik untuk mengganti" : "Click to replace"}`
+                    ) : (
+                      <>
+                        {t.landing_drop_or} <b>{t.landing_drop_browse}</b>
+                      </>
+                    )}
+                  </p>
+                  <small>{t.landing_drop_limit}</small>
+                </button>
+                {extractingPdf && (
+                  <div className="extracted-preview-box" style={{ textAlign: "center", color: "#0284c7" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <Icon name="clock" size={16} />
+                      <b>{t.upload_extracting}</b>
+                    </div>
+                  </div>
+                )}
+                {extractedData && (
+                  <div className="extracted-preview-box">
+                    <div className="extracted-badge">
+                      <Icon name="check" size={14} />
+                      <span>{t.upload_extracted_success} ({extractedData.numPages} {lang === "id" ? "hal" : "pages"} · {extractedData.charCount.toLocaleString("id-ID")} {lang === "id" ? "karakter" : "chars"} · {extractedData.wordCount} {lang === "id" ? "kata" : "words"})</span>
+                    </div>
+                    <div className="extracted-text-snippet">
+                      {extractedData.text.slice(0, 320)}...
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
             <button
-              className={`drop-zone ${dragging ? "dragging" : ""} ${
-                uploadFile ? "has-file" : ""
-              }`}
-              onClick={() => fileInput.current?.click()}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragging(true)
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDragging(false)
-                selectFile(e.dataTransfer.files[0])
+              type="button"
+              className="demo-case-btn"
+              onClick={() => {
+                setUploadContractType("kerja")
+                setUploadMode("paste")
+                setUploadText(KEVIN_BIROWO_CONTRACT)
+                setExtractedData({
+                  text: KEVIN_BIROWO_CONTRACT,
+                  numPages: 2,
+                  charCount: KEVIN_BIROWO_CONTRACT.length,
+                  wordCount: KEVIN_BIROWO_CONTRACT.split(/\s+/).filter(Boolean).length,
+                })
+                setUploadError("")
               }}
             >
-              <span className="upload-circle">
-                <Icon name={uploadFile ? "file" : "upload"} size={28} />
-              </span>
-              <h3>
-                {uploadFile ? uploadFile.name : t.landing_drop_title}
-              </h3>
-              <p>
-                {uploadFile ? (
-                  `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB · ${lang === "id" ? "Klik untuk mengganti" : "Click to replace"}`
-                ) : (
-                  <>
-                    {t.landing_drop_or} <b>{t.landing_drop_browse}</b>
-                  </>
-                )}
-              </p>
-              <small>{t.landing_drop_limit}</small>
+              <Icon name="spark" size={16} />
+              <span>{t.upload_demo_kevin_btn}</span>
             </button>
+
             {uploadError && (
               <p className="form-error" role="alert">
                 {uploadError}
@@ -3374,13 +3974,13 @@ export default function App() {
             <div className="upload-demo-note">
               <Icon name="spark" size={16} />
               <p>
-                <b>{lang === "id" ? "Jelajahi prototipe." : "Explore the prototype."}</b> {t.upload_sample_note}
+                <b>{lang === "id" ? "Grounding Hukum AI." : "AI Legal Grounding."}</b> {lang === "id" ? "Dianalisis otomatis berbasis UU Ketenagakerjaan & KUHPerdata Indonesia." : "Automatically analyzed grounded in Indonesian Manpower Law & Civil Code."}
               </p>
             </div>
             <Button
               icon="spark"
               className="full-width"
-              disabled={!uploadFile}
+              disabled={extractingPdf || (uploadMode === "paste" ? !uploadText.trim() : (!uploadFile && !extractedData))}
               onClick={analyzeUpload}
             >
               {t.upload_btn}
@@ -3396,8 +3996,14 @@ export default function App() {
       {clause !== null && (
         <div
           className="modal-backdrop drawer-backdrop"
+          onMouseDown={(e) => {
+            backdropMouseDownRef.current = e.target
+          }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) setClause(null)
+            if (e.target === e.currentTarget && backdropMouseDownRef.current === e.currentTarget) {
+              setClause(null)
+            }
+            backdropMouseDownRef.current = null
           }}
         >
           <div
@@ -3406,6 +4012,8 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="clause-title"
             ref={modalRef}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-top">
               <span>{t.clause_drawer_title}</span>
@@ -3503,8 +4111,14 @@ export default function App() {
       {planModal && (
         <div
           className="modal-backdrop"
+          onMouseDown={(e) => {
+            backdropMouseDownRef.current = e.target
+          }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) setPlanModal(null)
+            if (e.target === e.currentTarget && backdropMouseDownRef.current === e.currentTarget) {
+              setPlanModal(null)
+            }
+            backdropMouseDownRef.current = null
           }}
         >
           <div
@@ -3513,6 +4127,8 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="plan-title"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-heading">
               <span className="stat-icon blue">
@@ -3528,13 +4144,13 @@ export default function App() {
             </div>
             <h2 id="plan-title">
               {lang === "id"
-                ? `Paket CLARIQ ${planModal}. Lebih banyak kejelasan.`
+                ? `Paket Cek Kontrak ${planModal}. Lebih banyak kejelasan.`
                 : `A little more ${planModal === "Free" ? "simplicity" : "clarity"}.`}
             </h2>
             <p>
               {lang === "id"
-                ? `Anda memilih paket CLARIQ ${planModal}. Ini adalah prototipe demo—tidak ada informasi pembayaran yang dibutuhkan.`
-                : `You’ve selected CLARIQ ${planModal}. This is a demo—no payment details are needed, and you won’t be charged.`}
+                ? `Anda memilih paket Cek Kontrak ${planModal}. Ini adalah prototipe demo—tidak ada informasi pembayaran yang dibutuhkan.`
+                : `You’ve selected Cek Kontrak ${planModal}. This is a demo—no payment details are needed, and you won’t be charged.`}
             </p>
             <div className="plan-demo-card">
               <Icon name="shield" size={20} />
@@ -3547,8 +4163,8 @@ export default function App() {
                 setPlanModal(null)
                 setToast(
                   lang === "id"
-                    ? `Selamat datang di CLARIQ ${planModal}. Paket demo aktif.`
-                    : `Welcome to CLARIQ ${planModal}. Your demo plan is selected.`
+                    ? `Selamat datang di Cek Kontrak ${planModal}. Paket demo aktif.`
+                    : `Welcome to Cek Kontrak ${planModal}. Your demo plan is selected.`
                 )
                 navigate("dashboard")
               }}
@@ -3562,8 +4178,14 @@ export default function App() {
       {authModal && (
         <div
           className="modal-backdrop"
+          onMouseDown={(e) => {
+            backdropMouseDownRef.current = e.target
+          }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) setAuthModal(null)
+            if (e.target === e.currentTarget && backdropMouseDownRef.current === e.currentTarget) {
+              setAuthModal(null)
+            }
+            backdropMouseDownRef.current = null
           }}
         >
           <div
@@ -3572,6 +4194,8 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="auth-title"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-heading">
               <span className="stat-icon blue">
@@ -3645,10 +4269,31 @@ export default function App() {
               </button>
             </div>
 
-            {authError && <div className="form-error">{authError}</div>}
+            {authError && (
+              <div
+                className="form-error"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  color: "#dc2626",
+                  padding: "10px 12px",
+                  borderRadius: "7px",
+                  fontSize: "11px",
+                  lineHeight: 1.5,
+                  margin: "0 0 14px 0",
+                }}
+              >
+                <Icon name="warning" size={16} />
+                <span>{authError}</span>
+              </div>
+            )}
 
             <form
               onSubmit={handleAuthSubmit}
+              noValidate
               style={{ display: "flex", flexDirection: "column", gap: "14px" }}
             >
               {authModal === "register" && (
@@ -3804,6 +4449,65 @@ export default function App() {
                 </>
               )}
             </p>
+          </div>
+        </div>
+      )}
+      {contractToDelete && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            backdropMouseDownRef.current = e.target
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && backdropMouseDownRef.current === e.currentTarget) {
+              setContractToDelete(null)
+            }
+            backdropMouseDownRef.current = null
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-dialog-title"
+            style={{ maxWidth: "440px" }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-heading">
+              <span className="stat-icon" style={{ background: "#fef2f2", color: "#dc2626" }}>
+                <Icon name="trash" size={22} />
+              </span>
+              <button
+                className="icon-button"
+                aria-label="Tutup"
+                onClick={() => setContractToDelete(null)}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+            <h2 id="delete-dialog-title" style={{ fontSize: "18px", fontWeight: 700, margin: "14px 0 8px" }}>
+              {t.delete_confirm_title}
+            </h2>
+            <p style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: "20px" }}>
+              {t.delete_confirm_desc}{" "}
+              <b style={{ color: "var(--color-navy)" }}>{getContractName(contractToDelete, lang)}</b>?
+            </p>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <Button
+                variant="secondary"
+                onClick={() => setContractToDelete(null)}
+              >
+                {t.delete_cancel_btn}
+              </Button>
+              <Button
+                style={{ background: "#dc2626", borderColor: "#dc2626", color: "#ffffff" }}
+                onClick={() => handleDeleteContract(contractToDelete)}
+              >
+                <Icon name="trash" size={15} />
+                {t.delete_confirm_btn}
+              </Button>
+            </div>
           </div>
         </div>
       )}

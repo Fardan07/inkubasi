@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { PDFParse } from 'pdf-parse';
 import { prisma, isDbConnected } from './db.js';
 import {
   LEGAL,
@@ -377,25 +378,72 @@ const contractComparisonData = {
 };
 
 // ==========================================
-// ROUTES: CEK KONTRAK (Fitur Analisis AI dengan Grounding Hukum Indonesia)
+// ROUTES: CEK KONTRAK & EKSTRAKSI DOKUMEN PDF
 // ==========================================
+
+// Endpoint Ekstraksi Teks PDF Asli (Zero Hallucination)
+app.post('/api/extract-pdf', async (req, res) => {
+  try {
+    const { base64, fileName } = req.body || {};
+    if (!base64 || typeof base64 !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Data base64 file PDF wajib disertakan dalam payload.',
+      });
+    }
+
+    const cleanBase64 = base64.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    const parser = new PDFParse({ data: buffer });
+    const textResult = await parser.getText();
+    await parser.destroy();
+
+    const rawText = textResult.text || '';
+    const trimmed = rawText.trim();
+    if (!trimmed) {
+      return res.status(400).json({
+        success: false,
+        message: 'Teks dokumen tidak terbaca atau PDF berupa gambar scan. Silakan gunakan PDF berbasis teks atau tempel (paste) isi kontrak secara manual.',
+      });
+    }
+
+    const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+    const charCount = trimmed.length;
+
+    res.json({
+      success: true,
+      message: `Berhasil mengekstrak ${textResult.total || 1} halaman (${charCount.toLocaleString('id-ID')} karakter).`,
+      data: {
+        text: trimmed,
+        numPages: textResult.total || 1,
+        charCount,
+        wordCount,
+        fileName: fileName || 'document.pdf',
+      },
+    });
+  } catch (err) {
+    console.error('PDF extraction error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal mengekstrak teks dari PDF: ' + err.message,
+    });
+  }
+});
 
 // Analisis teks kontrak (tanpa menyimpan ke daftar kontrak)
 app.post('/api/contract-check/analyze', (req, res) => {
-  const { contractType = 'kerja', contractText = '', fileName = null } = req.body || {};
+  const { contractType = 'kerja', contractText = '', fileName = null, useSample = false } = req.body || {};
   const jenis = contractType === 'sewa' ? 'sewa' : 'kerja';
 
-  if (!contractText?.trim() && !fileName) {
+  const hasText = Boolean(contractText && contractText.trim().length > 0);
+  if (!hasText && !useSample) {
     return res.status(400).json({
       success: false,
-      message: 'Tempel teks kontrak atau unggah file terlebih dahulu.',
+      message: 'Teks dokumen tidak terbaca atau PDF berupa gambar scan. Silakan gunakan PDF berbasis teks atau tempel (paste) isi kontrak secara manual.',
     });
   }
 
-  const teks = contractText?.trim()
-    ? contractText
-    : `[Dokumen diunggah: ${fileName || 'document.pdf'}] ${CONTOH[jenis]}`;
-
+  const teks = hasText ? contractText.trim() : CONTOH[jenis];
   const ai = simulateAiAnalysis(teks, jenis);
 
   res.json({
@@ -412,6 +460,7 @@ app.post('/api/contract-check/analyze', (req, res) => {
       contractType: jenis,
       legalSummary: LEGAL[jenis],
       aiClauses: ai.klausul,
+      meta: ai.meta,
     },
   });
 });
@@ -550,6 +599,59 @@ async function persistContractToDb(contract, req) {
       },
       include: { clauses: true },
     });
+
+    if (loggedUser) {
+      try {
+        const isSewa = created.type === 'Rental' || created.contractType === 'sewa';
+        const metaObj = contract.meta || {};
+        let payDay = '25';
+        if (metaObj.paymentSchedule) {
+          const matchDay = metaObj.paymentSchedule.match(/tanggal\s*(\d+)/i);
+          if (matchDay) payDay = String(matchDay[1]).padStart(2, '0');
+        }
+        const secondTitle = isSewa
+          ? 'Batas Pemberitahuan Perpanjangan Sewa'
+          : (metaObj.probationPeriod ? 'Akhir Masa Uji Coba (1 Bulan)' : 'Batas Pemberitahuan Perpanjangan Kontrak');
+
+        await prisma.importantDate.createMany({
+          data: [
+            {
+              day: payDay,
+              month: 'NOV',
+              title: isSewa ? 'Pembayaran Sewa Bulanan' : 'Pembayaran Gaji Bulanan',
+              titleId: isSewa ? 'Pembayaran Sewa Bulanan' : 'Pembayaran Gaji Bulanan',
+              contractName: created.name,
+              contractId: String(created.id),
+              date: `${payDay} Nov 2027`,
+              dateId: `${payDay} Nov 2027`,
+              tag: '13 days remaining',
+              tagId: '13 hari tersisa',
+              kind: 'mint',
+              reminderEnabled: true,
+              userId: loggedUser.id,
+            },
+            {
+              day: payDay === '30' ? '30' : '12',
+              month: 'DES',
+              title: secondTitle,
+              titleId: secondTitle,
+              contractName: created.name,
+              contractId: String(created.id),
+              date: `${payDay === '30' ? '30' : '12'} Des 2027`,
+              dateId: `${payDay === '30' ? '30' : '12'} Des 2027`,
+              tag: '30 days remaining',
+              tagId: '30 hari tersisa',
+              kind: 'blue',
+              reminderEnabled: true,
+              userId: loggedUser.id,
+            },
+          ],
+        });
+      } catch (dErr) {
+        console.warn('⚠️ Gagal membuat agenda tanggal otomatis:', dErr.message);
+      }
+    }
+
     return formatContractRow(created);
   } catch (err) {
     console.warn('⚠️ Gagal menyimpan kontrak ke PostgreSQL:', err.message);
@@ -630,7 +732,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Akun CLARIQ berhasil dibuat!',
+      message: 'Akun Cek Kontrak berhasil dibuat!',
       token,
       user: {
         id: newUser.id,
@@ -694,7 +796,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Berhasil masuk ke CLARIQ!',
+      message: 'Berhasil masuk ke Cek Kontrak!',
       token,
       user: {
         id: foundUser.id,
@@ -725,7 +827,7 @@ app.get('/api/auth/me', async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    system: 'CLARIQ AI Contract Platform Backend',
+    system: 'Cek Kontrak AI Platform Backend',
     database: isDbConnected() ? 'Neon PostgreSQL Connected' : 'In-Memory Mode (DATABASE_URL ready)',
     uptime: `${Math.floor(process.uptime())}s`,
     timestamp: new Date().toISOString(),
@@ -859,9 +961,23 @@ app.get('/api/contracts', async (req, res) => {
   });
 });
 
+// Compare Contracts API (Must be declared before /api/contracts/:id to avoid parameter shadowing)
+app.get('/api/contracts/compare', (req, res) => {
+  res.json({
+    success: true,
+    data: contractComparisonData,
+  });
+});
+
 // Single Contract Detail
 app.get('/api/contracts/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ success: false, message: 'ID kontrak tidak valid.' });
+  }
+
+  const loggedUser = await getUserFromReq(req);
+
   if (isDbConnected() && prisma) {
     try {
       const foundDb = await prisma.contract.findUnique({
@@ -869,6 +985,9 @@ app.get('/api/contracts/:id', async (req, res) => {
         include: { clauses: true },
       });
       if (foundDb) {
+        if (foundDb.userId && loggedUser && foundDb.userId !== loggedUser.id) {
+          return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk mengakses kontrak ini.' });
+        }
         return res.json({
           success: true,
           data: formatContractRow(foundDb),
@@ -883,6 +1002,9 @@ app.get('/api/contracts/:id', async (req, res) => {
   const found = contracts.find((c) => c.id === id);
   if (!found) {
     return res.status(404).json({ success: false, message: 'Kontrak tidak ditemukan.' });
+  }
+  if (found.userId && loggedUser && found.userId !== loggedUser.id) {
+    return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk mengakses kontrak ini.' });
   }
   res.json({
     success: true,
@@ -903,18 +1025,30 @@ app.post('/api/contracts', async (req, res) => {
     contractText,
     lang = 'id',
     useAICheck = false,
+    useSample = false,
   } = req.body || {};
 
   // ========== MODE BARU: Analisis AI Cek Kontrak dengan Grounding Hukum Indonesia ==========
-  if (useAICheck || contractType || (contractText && contractText.trim().length > 0)) {
+  if (useAICheck || contractType || (contractText && contractText.trim().length > 0) || fileName) {
     try {
+      const hasText = Boolean(contractText && contractText.trim().length > 0);
+      if (!hasText && !useSample) {
+        return res.status(400).json({
+          success: false,
+          message: 'Teks dokumen tidak terbaca atau PDF berupa gambar scan. Silakan gunakan PDF berbasis teks atau tempel (paste) isi kontrak secara manual.',
+        });
+      }
+
+      const isSewa = contractType === 'sewa' || /sewa|lease|apartemen|kos|rental/i.test((name || '') + ' ' + (fileName || ''));
+      const effectiveType = isSewa ? 'sewa' : 'kerja';
       const newContract = buildContractFromAnalysis({
         name,
         company,
         fileName,
-        contractType: contractType === 'sewa' ? 'sewa' : 'kerja',
+        contractType: effectiveType,
         contractText,
         lang,
+        useSample,
       });
 
       const persisted = await persistContractToDb(newContract, req);
@@ -936,7 +1070,10 @@ app.post('/api/contracts', async (req, res) => {
       });
     } catch (err) {
       console.error('AI check error:', err);
-      // fall-through ke mode lama
+      return res.status(400).json({
+        success: false,
+        message: err.message || 'Gagal menganalisis dokumen kontrak.',
+      });
     }
   }
 
@@ -1031,7 +1168,7 @@ app.post('/api/contracts', async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: 'Dokumen berhasil dianalisis oleh AI CLARIQ!',
+    message: 'Dokumen berhasil dianalisis oleh AI Cek Kontrak!',
     data: finalContract,
   });
 });
@@ -1039,9 +1176,21 @@ app.post('/api/contracts', async (req, res) => {
 // Delete Contract
 app.delete('/api/contracts/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ success: false, message: 'ID kontrak tidak valid.' });
+  }
+
+  const loggedUser = await getUserFromReq(req);
   let deletedFromDb = false;
   if (isDbConnected() && prisma) {
     try {
+      const existing = await prisma.contract.findUnique({ where: { id } });
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Kontrak tidak ditemukan.' });
+      }
+      if (existing.userId && loggedUser && existing.userId !== loggedUser.id) {
+        return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk menghapus kontrak ini.' });
+      }
       await prisma.contract.delete({ where: { id } });
       deletedFromDb = true;
     } catch (err) {
@@ -1062,6 +1211,10 @@ app.delete('/api/contracts/:id', async (req, res) => {
 
 // AI Chat
 app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
+  if (req.params.id && isNaN(parseInt(req.params.id, 10))) {
+    return res.status(400).json({ success: false, message: 'ID kontrak tidak valid.' });
+  }
+
   const contractId = req.params.id ? parseInt(req.params.id, 10) : req.body.contractId || 1;
   const question = (req.body.question || req.body.message || '').trim();
 
@@ -1069,6 +1222,7 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
     return res.status(400).json({ success: false, message: 'Pertanyaan tidak boleh kosong.' });
   }
 
+  const loggedUser = await getUserFromReq(req);
   let contract = null;
   if (isDbConnected() && prisma) {
     try {
@@ -1077,6 +1231,9 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
         include: { clauses: true },
       });
       if (dbFound) {
+        if (dbFound.userId && loggedUser && dbFound.userId !== loggedUser.id) {
+          return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk berinteraksi dengan kontrak ini.' });
+        }
         contract = formatContractRow(dbFound);
       }
     } catch (err) {
@@ -1085,6 +1242,9 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
   }
   if (!contract) {
     contract = contracts.find((c) => c.id === contractId) || contracts[0];
+  }
+  if (contract && contract.userId && loggedUser && contract.userId !== loggedUser.id) {
+    return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk berinteraksi dengan kontrak ini.' });
   }
   const lang = (req.body.lang || req.query.lang || 'id').toLowerCase();
 
@@ -1168,13 +1328,6 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
   });
 });
 
-// Compare Contracts API
-app.get('/api/contracts/compare', (req, res) => {
-  res.json({
-    success: true,
-    data: contractComparisonData,
-  });
-});
 
 // Important Dates & Reminders
 app.get('/api/dates', async (req, res) => {
@@ -1186,10 +1339,14 @@ app.get('/api/dates', async (req, res) => {
         where: userCondition,
         orderBy: { id: 'asc' },
       });
+      const normalized = dbDates.map((d) => ({
+        ...d,
+        contract: d.contractName || d.contract,
+      }));
       return res.json({
         success: true,
-        total: dbDates.length,
-        data: dbDates,
+        total: normalized.length,
+        data: normalized,
         dbConnected: true,
       });
     } catch (err) {
@@ -1198,20 +1355,34 @@ app.get('/api/dates', async (req, res) => {
   }
 
   const userDates = loggedUser ? datesList.filter((d) => d.userId === loggedUser.id) : [];
+  const normalizedFallback = userDates.map((d) => ({
+    ...d,
+    contractName: d.contractName || d.contract,
+    contract: d.contract || d.contractName,
+  }));
   res.json({
     success: true,
-    total: userDates.length,
-    data: userDates,
+    total: normalizedFallback.length,
+    data: normalizedFallback,
     dbConnected: false,
   });
 });
 
 app.put('/api/dates/:id/reminder', async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ success: false, message: 'ID tanggal tidak valid.' });
+  }
+
+  const loggedUser = await getUserFromReq(req);
+
   if (isDbConnected() && prisma) {
     try {
       const current = await prisma.importantDate.findUnique({ where: { id } });
       if (current) {
+        if (current.userId && loggedUser && current.userId !== loggedUser.id) {
+          return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk mengubah pengingat ini.' });
+        }
         const updated = await prisma.importantDate.update({
           where: { id },
           data: { reminderEnabled: !current.reminderEnabled },
@@ -1231,6 +1402,9 @@ app.put('/api/dates/:id/reminder', async (req, res) => {
   const found = datesList.find((d) => d.id === id);
   if (!found) {
     return res.status(404).json({ success: false, message: 'Tanggal tidak ditemukan.' });
+  }
+  if (found.userId && loggedUser && found.userId !== loggedUser.id) {
+    return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk mengubah pengingat ini.' });
   }
   found.reminderEnabled = !found.reminderEnabled;
   res.json({
@@ -1264,23 +1438,37 @@ app.put('/api/user', async (req, res) => {
     });
   }
 
-  if (name !== undefined) userProfile.name = name.trim();
-  if (email !== undefined) userProfile.email = email.trim();
+  const cleanName = name !== undefined && typeof name === 'string' ? name.trim() : undefined;
+  const cleanEmail = email !== undefined && typeof email === 'string' ? email.trim().toLowerCase() : undefined;
+
+  if (name !== undefined) userProfile.name = cleanName;
+  if (email !== undefined) userProfile.email = cleanEmail;
   if (emailReminders !== undefined) userProfile.emailReminders = Boolean(emailReminders);
   if (plan !== undefined) userProfile.plan = plan;
 
   if (isDbConnected() && prisma) {
     try {
+      if (cleanEmail && cleanEmail !== loggedUser.email) {
+        const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
+        if (existing && existing.id !== loggedUser.id) {
+          return res.status(400).json({ success: false, message: 'Email sudah terdaftar oleh akun lain.' });
+        }
+      }
+
       const updated = await prisma.user.update({
         where: { id: loggedUser.id },
         data: {
-          name: name ? name.trim() : undefined,
+          name: cleanName,
+          email: cleanEmail,
           emailReminders: emailReminders !== undefined ? Boolean(emailReminders) : undefined,
           plan: plan || undefined,
         },
       });
       return res.json({ success: true, message: 'Profil berhasil diperbarui di database!', data: updated });
-    } catch {}
+    } catch (err) {
+      console.warn('⚠️ Gagal memperbarui user di DB:', err.message);
+      return res.status(400).json({ success: false, message: 'Gagal memperbarui profil di database: ' + err.message });
+    }
   }
 
   res.json({
@@ -1300,13 +1488,13 @@ app.put('/api/user', async (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Endpoint ${req.method} ${req.url} tidak ditemukan di server backend CLARIQ.`,
+    message: `Endpoint ${req.method} ${req.url} tidak ditemukan di server backend Cek Kontrak.`,
   });
 });
 
 // Error Handler
 app.use((err, req, res, next) => {
-  console.error('CLARIQ Backend Error:', err);
+  console.error('Cek Kontrak Backend Error:', err);
   res.status(500).json({
     success: false,
     message: 'Terjadi kesalahan pada internal server.',
@@ -1314,9 +1502,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   console.log(`===============================================`);
-  console.log(`⚖️  CLARIQ AI Contract Platform - Backend Service`);
+  console.log(`⚖️  Cek Kontrak AI Platform - Backend Service`);
   console.log(`📡 Server running on: http://localhost:${PORT}`);
   console.log(`🔐 Auth Endpoints: /api/auth/register & /api/auth/login`);
   console.log(`🩺 Health API: http://localhost:${PORT}/api/health`);
@@ -1344,5 +1532,15 @@ app.listen(PORT, async () => {
     }
   } catch (err) {
     console.warn('⚠️ Seeding demo user skipped:', err.message);
+  }
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ [PORT CONFLICT] Port ${PORT} sedang dipakai oleh proses lain!`);
+    console.error(`💡 Solusi cepat di PowerShell:`);
+    console.error(`   Get-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess | Stop-Process -Force\n`);
+  } else {
+    console.error('Server error:', err);
   }
 });

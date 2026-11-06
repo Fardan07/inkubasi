@@ -3,11 +3,14 @@
   "version": "1.0.0",
   "description": "Fullstack Framework Node.js dengan Express Backend dan Vite Frontend",
   "scripts": {
-    "dev": "concurrently -n \"backend,frontend\" -c \"yellow.bold,cyan.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently -k -n \"backend,frontend\" -c \"yellow.bold,cyan.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
+    "clean:port": "powershell -Command \"Get-Process -Id (Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue).OwningProcess -ErrorAction SilentlyContinue | Stop-Process -Force\"",
     "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
-    "build": "npm --prefix frontend run build"
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix backend test",
+    "typecheck": "npm --prefix frontend run typecheck"
   },
   "keywords": [
     "nodejs",
