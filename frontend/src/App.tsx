@@ -1858,6 +1858,12 @@ export default function App() {
                     </button>
                   </>
                 )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderTop: "1px solid var(--border)", marginTop: "6px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>
+                    {lang === "id" ? "Pilihan Bahasa" : "Language"}
+                  </span>
+                  <LanguageSwitcher lang={lang} onChange={setLang} />
+                </div>
               </div>
             )}
           </header>
@@ -2024,7 +2030,7 @@ export default function App() {
             </div>
           </header>
         )}
-        <main key={page} className={isLanding ? "landing-content" : "page-content"}>
+        <main key={page} className={`${isLanding ? "landing-content" : "page-content"} page-enter`}>
           {page === "dashboard" && (
             <>
               <div className="page-heading">
@@ -2116,9 +2122,9 @@ export default function App() {
                     page: "contracts" as Page,
                     filterKey: "all",
                   },
-                ].map((stat) => (
+                ].map((stat, idx) => (
                   <button
-                    className="stat-card"
+                    className={`stat-card stagger-${idx + 1}`}
                     key={stat.label}
                     onClick={() => {
                       navigate(stat.page)
@@ -2478,8 +2484,8 @@ export default function App() {
                     value: selected.meta?.role || selected.type || (lang === "id" ? "Karyawan" : "Employee"),
                     sub: selected.meta?.company || selected.company || (lang === "id" ? "Perusahaan" : "Company"),
                   },
-                ].map((item) => (
-                  <div className="surface insight-card" key={item.label}>
+                ].map((item, idx) => (
+                  <div className={`surface insight-card stagger-${idx + 1}`} key={item.label}>
                     <div>
                       <Icon name={item.icon} size={18} />
                       <span>{item.label}</span>
@@ -2539,7 +2545,7 @@ export default function App() {
                 />
                 {activeClauses.map((item, i) => (
                   <button
-                    className="clause-row"
+                    className={`clause-row ${i < 4 ? `stagger-${i + 1}` : ""}`}
                     key={item.title}
                     onClick={() => openClause(i)}
                   >
@@ -3575,7 +3581,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="landing-upload-card">
-                  <div className="landing-art">
+                  <div className="landing-art float-gentle">
                     <DocumentArt lang={lang} />
                   </div>
                   <button
@@ -3652,8 +3658,8 @@ export default function App() {
                       description: t.landing_feat_3_desc,
                       label: lang === "id" ? "SELALU TERDEPAN" : "A STEP AHEAD",
                     },
-                  ].map((f) => (
-                    <div className="surface feature-card" key={f.title}>
+                  ].map((f, idx) => (
+                    <div className={`surface feature-card stagger-${idx + 1}`} key={f.title}>
                       <span className="stat-icon blue">
                         <Icon name={f.icon} size={24} />
                       </span>
@@ -3705,7 +3711,7 @@ export default function App() {
                       text: t.landing_step_4_desc,
                     },
                   ].map((s, i) => (
-                    <div key={s.title}>
+                    <div className={`stagger-${i + 1}`} key={s.title}>
                       <span className="step-number">0{i + 1}</span>
                       <h3>{s.title}</h3>
                       <p>{s.text}</p>
