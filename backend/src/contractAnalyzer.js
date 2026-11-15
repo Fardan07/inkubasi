@@ -162,19 +162,23 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
   }
 
   // 8. Denda / Penalti Resign
-  const penaltyMatch =
-    teks.match(/(?:denda|penalti|ganti\s*rugi|biaya\s*pelatihan)[^.\n]*?(?:sebesar\s*)?(?:rp\.?|idr)?\s*([\d\.,]+(?:\s*juta|\s*ribu)?)/i);
+  const isNoPenaltyExplicit = /(?:tanpa\s*(?:pengenaan\s*)?denda|bebas\s*denda|tidak\s*(?:dikenakan|membebankan)\s*denda)/i.test(teks);
+  const penaltyMatch = !isNoPenaltyExplicit && (
+    teks.match(/(?:denda|penalti|ganti\s*rugi|biaya\s*pelatihan)[^.\n]*?(?:rp\.?|idr)\s*([\d\.,]+(?:\s*juta|\s*ribu)?)/i) ||
+    teks.match(/(?:denda|penalti|ganti\s*rugi|biaya\s*pelatihan)[^.\n]*?([\d\.,]+\s*(?:juta|ribu))/i) ||
+    teks.match(/(?:denda|penalti|ganti\s*rugi|biaya\s*pelatihan)[^.\n]*?sebesar\s*([\d\.,]{5,})/i)
+  );
   if (penaltyMatch) {
     const rawPenalty = penaltyMatch[1].trim();
     const penaltyNum = parseRupiah(rawPenalty);
-    if (penaltyNum > 0) {
+    if (penaltyNum >= 50000) {
       meta.penalty = formatRupiah(penaltyNum);
       meta.penaltyNum = penaltyNum;
       if (meta.salaryNum && penaltyNum >= meta.salaryNum) {
         meta.disproportionatePenalty = true;
       }
     }
-  } else if (/denda.*(?:3x|tiga.*kali|3.*kali)/i.test(teks)) {
+  } else if (!isNoPenaltyExplicit && /denda.*(?:3x|tiga.*kali|3.*kali)/i.test(teks)) {
     meta.penalty = '3x Gaji Bulanan';
     meta.disproportionatePenalty = true;
   }
@@ -235,7 +239,7 @@ export function simulateAiAnalysis(teks, jenis = 'kerja') {
     // ----------------------------------------------------
     // 1. Deteksi Denda Nominal & Proporsionalitas (Fix Bug #3)
     // ----------------------------------------------------
-    if (meta.disproportionatePenalty || /(?:denda|penalti|ganti\s*rugi|biaya\s*pelatihan)[^.\n]*?(?:rp\.?|idr)?\s*[\d\.,]+(?:\s*juta|\s*ribu)?/i.test(cleanTeks) || /denda.*(?:3x|tiga.*kali|3.*kali)/i.test(cleanTeks)) {
+    if (meta.disproportionatePenalty || Boolean(meta.penalty)) {
       const kutipanDenda =
         extractSentenceMatch(cleanTeks, /(?:denda|penalti|ganti\s*rugi|biaya\s*pelatihan)[^.\n]*?(?:rp\.?|idr)?\s*[\d\.,]+/i) ||
         extractSentenceMatch(cleanTeks, /denda.*(?:3x|tiga.*kali|gaji)/i) ||
@@ -266,7 +270,36 @@ export function simulateAiAnalysis(teks, jenis = 'kerja') {
     // ----------------------------------------------------
     // 2. Deteksi Klausul Masa Uji Coba / Probation (Fix Bug #4)
     // ----------------------------------------------------
-    if (/(?:masa\s*uji\s*coba|masa\s*percobaan|probation)/i.test(cleanTeks)) {
+    const isExplicitPkwttNoPenalty =
+      /(?:PERJANJIAN\s*KERJA\s*WAKTU\s*TIDAK\s*TERTENTU|\(PKWTT\))/i.test(cleanTeks) &&
+      !meta.disproportionatePenalty &&
+      !meta.penalty;
+    const isExplicitNoProbationPkwt =
+      /(?:tanpa\s*masa\s*percobaan|tidak\s*memberlakukan\s*masa\s*percobaan)/i.test(cleanTeks) &&
+      !meta.disproportionatePenalty;
+
+    if (isExplicitNoProbationPkwt) {
+      klausul.push({
+        kutipan:
+          extractSentenceMatch(cleanTeks, /[^.\n]*(?:tanpa\s*masa\s*percobaan|tidak\s*memberlakukan\s*masa\s*percobaan)[^.\n]*/i) ||
+          'Ketentuan PKWT tanpa masa percobaan sesuai Pasal 58 UU 13/2003',
+        risiko: 'aman',
+        penjelasan:
+          'Kontrak PKWT ini secara tegas meniadakan masa percobaan (probation), sehingga 100% patuh terhadap Pasal 58 UU No. 13 Tahun 2003 jo. UU No. 6 Tahun 2023.',
+        rujukan: 'Pasal 58 ayat (1) & (2) UU No. 13 Tahun 2003',
+      });
+    } else if (isExplicitPkwttNoPenalty && /(?:masa\s*uji\s*coba|masa\s*percobaan|probation)/i.test(cleanTeks)) {
+      const kutipanProbation =
+        extractSentenceMatch(cleanTeks, /(?:masa\s*uji\s*coba|masa\s*percobaan|probation)[^.\n]*/i) ||
+        'Klausul masa percobaan PKWTT (Karyawan Tetap)';
+      klausul.push({
+        kutipan: kutipanProbation,
+        risiko: 'aman',
+        penjelasan:
+          'Masa percobaan kerja (probation) paling lama 3 (tiga) bulan sah secara hukum karena diterapkan pada Perjanjian Kerja Waktu Tidak Tertentu (PKWTT / Karyawan Tetap) tanpa denda pengunduran diri.',
+        rujukan: 'Pasal 60 ayat (1) UU Ketenagakerjaan No. 13 Tahun 2003',
+      });
+    } else if (/(?:masa\s*uji\s*coba|masa\s*percobaan|probation)/i.test(cleanTeks)) {
       const kutipanProbation =
         extractSentenceMatch(cleanTeks, /(?:masa\s*uji\s*coba|masa\s*percobaan|probation)[^.\n]*/i) ||
         'Klausul masa uji coba (probation)';
@@ -303,7 +336,8 @@ export function simulateAiAnalysis(teks, jenis = 'kerja') {
     // ----------------------------------------------------
     // 4. Jangka Waktu Pendek (<= 6 bulan)
     // ----------------------------------------------------
-    if (/(?:6|enam)\s*(?:bulan|bln)/i.test(cleanTeks) && !/(?:uji\s*coba|percobaan)/i.test(cleanTeks)) {
+    const hasCompliantPkwtCompensation = /(?:uang\s*kompensasi\s*PKWT|Pasal\s*15\s*PP\s*(?:No\.?\s*)?35)/i.test(cleanTeks);
+    if (/(?:6|enam)\s*(?:bulan|bln)/i.test(cleanTeks) && !/(?:uji\s*coba|percobaan)/i.test(cleanTeks) && !hasCompliantPkwtCompensation) {
       klausul.push({
         kutipan:
           extractSentenceMatch(cleanTeks, /(?:6|enam)\s*(?:bulan|bln)[^.\n]*/i) ||
@@ -315,6 +349,16 @@ export function simulateAiAnalysis(teks, jenis = 'kerja') {
         saran: SARAN.perhatian,
       });
       skorRisiko += 10;
+    } else if (hasCompliantPkwtCompensation) {
+      klausul.push({
+        kutipan:
+          extractSentenceMatch(cleanTeks, /[^.\n]*(?:uang\s*kompensasi\s*PKWT|Pasal\s*15\s*PP)[^.\n]*/i) ||
+          'Ketentuan Uang Kompensasi PKWT sesuai PP No. 35 Tahun 2021',
+        risiko: 'aman',
+        penjelasan:
+          'Perjanjian ini mencantumkan jaminan pemberian Uang Kompensasi PKWT pada saat berakhirnya jangka waktu kontrak secara proporsional sesuai Pasal 15-16 PP No. 35 Tahun 2021.',
+        rujukan: 'Pasal 15 & Pasal 16 PP No. 35 Tahun 2021',
+      });
     }
 
     // ----------------------------------------------------
@@ -856,6 +900,192 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
   return { text: answer, source };
 }
 
+/**
+ * Generator Surat Kontrak Kerja Cerdas HRD (HRD Smart Contract Generator)
+ * Memvalidasi kepatuhan hukum (Pasal 58 & 60 UU 13/2003, Pasal 77, PP 35/2021)
+ * dan menyusun naskah kontrak kerja resmi yang 100% patuh regulasi Indonesia.
+ */
+export function generateHrdContract(params = {}) {
+  const rawType = String(params.contractSubType || params.agreementType || params.type || 'PKWT').toUpperCase();
+  const contractSubType =
+    rawType.includes('PKWTT') || rawType.includes('TETAP')
+      ? 'PKWTT'
+      : rawType.includes('FREELANCE') || rawType.includes('MITRA')
+      ? 'FREELANCE'
+      : 'PKWT';
+
+  const companyName = (params.companyName || 'PT. Nusantara Teknologi Mandiri').trim();
+  const companyAddress = (params.companyAddress || 'Jl. Jenderal Sudirman Kav. 52-53, SCBD, Jakarta Selatan').trim();
+  const hrdName = (params.hrdName || 'Rina Wijaya').trim();
+  const hrdRole = (params.hrdRole || 'HR Manager').trim();
+
+  const employeeName = (params.employeeName || 'Budi Santoso').trim();
+  const employeeAddress = (params.employeeAddress || 'Jl. Kemang Raya No. 18, Jakarta Selatan').trim();
+  const employeeNik = (params.employeeNik || '3174051208980002').trim();
+  const employeeRole = (params.employeeRole || 'Product Designer').trim();
+  const startDate = (params.startDate || '1 Desember 2026').trim();
+
+  const durationMonths = Math.max(1, Math.min(60, parseInt(params.durationMonths, 10) || 12));
+  const requestedProbation = parseInt(params.probationMonths, 10) || 0;
+
+  const rawSalary =
+    typeof params.salary === 'number'
+      ? params.salary
+      : parseRupiah(String(params.salary || '12000000')) || 12000000;
+  const formattedSalary = formatRupiah(rawSalary) || 'Rp12.000.000';
+  const paymentDay = Math.max(1, Math.min(31, parseInt(params.paymentDay, 10) || 25));
+  const workDays = (params.workDays || 'Senin hingga Jumat (5 hari kerja)').trim();
+  const workHours = (params.workHours || '09.00 - 17.00 WIB (40 jam/minggu)').trim();
+  const noticePeriodDays = Math.max(7, Math.min(90, parseInt(params.noticePeriodDays, 10) || 30));
+
+  const duties = (
+    params.duties ||
+    `Melaksanakan tugas dan tanggung jawab profesional sebagai ${employeeRole}, menyusun laporan kinerja berkala, serta berkoordinasi dengan tim terkait sesuai standar prosedur operasional perusahaan.`
+  ).trim();
+
+  const terminationTerms = (
+    params.terminationTerms ||
+    `Pengakhiran hubungan kerja dilakukan secara tertulis dengan masa pemberitahuan (notice period) minimal ${noticePeriodDays} hari kalender sebelumnya tanpa pengenaan denda finansial sepihak, sesuai dengan Peraturan Pemerintah Nomor 35 Tahun 2021.`
+  ).trim();
+
+  const contractNumber = (
+    params.contractNumber ||
+    `088/HRD-${contractSubType}/NTM/XI/${new Date().getFullYear()}`
+  ).trim();
+
+  // Smart Legal Guardrails & Compliance Validation
+  const legalWarnings = [];
+  let effectiveProbationMonths = requestedProbation;
+  let probationGuardrailTriggered = false;
+
+  if (contractSubType === 'PKWT') {
+    if (requestedProbation > 0) {
+      effectiveProbationMonths = 0;
+      probationGuardrailTriggered = true;
+      legalWarnings.push(
+        'Proteksi Hukum Otomatis (Pasal 58 UU No. 13 Tahun 2003 jo. UU No. 6 Tahun 2023): Masa percobaan kerja (probation) DILARANG pada kontrak PKWT dan batal demi hukum. Sistem otomatis menonaktifkan masa percobaan (dikoreksi menjadi 0 bulan) agar draf kontrak HRD Anda 100% sah.'
+      );
+    }
+  } else if (contractSubType === 'PKWTT') {
+    if (requestedProbation > 3) {
+      effectiveProbationMonths = 3;
+      probationGuardrailTriggered = true;
+      legalWarnings.push(
+        'Proteksi Hukum Otomatis (Pasal 60 ayat (1) UU No. 13 Tahun 2003): Masa percobaan kerja untuk karyawan tetap (PKWTT) dibatasi maksimal 3 (tiga) bulan. Sistem otomatis menyesuaikan masa percobaan menjadi 3 bulan.'
+      );
+    } else if (requestedProbation < 0) {
+      effectiveProbationMonths = 0;
+    }
+  } else {
+    // FREELANCE
+    effectiveProbationMonths = 0;
+    if (requestedProbation > 0) {
+      probationGuardrailTriggered = true;
+      legalWarnings.push(
+        'Kemitraan Pekerja Lepas (Freelance) tunduk pada KUHPerdata Pasal 1338 & 1601 dan tidak menggunakan skema masa percobaan karyawan.'
+      );
+    }
+  }
+
+  const docTitle =
+    contractSubType === 'PKWTT'
+      ? 'SURAT PERJANJIAN KERJA WAKTU TIDAK TERTENTU (PKWTT)'
+      : contractSubType === 'FREELANCE'
+      ? 'SURAT PERJANJIAN KEMITRAAN PEKERJA LEPAS (FREELANCE)'
+      : 'SURAT PERJANJIAN KERJA WAKTU TERTENTU (PKWT)';
+
+  const statusTextPasal1 =
+    contractSubType === 'PKWTT'
+      ? `Karyawan Tetap berdasarkan Perjanjian Kerja Waktu Tidak Tertentu (PKWTT) terhitung sejak tanggal ${startDate}`
+      : contractSubType === 'FREELANCE'
+      ? `Mitra Pekerja Lepas (Freelance) untuk jangka waktu ${durationMonths} (${durationMonths}) bulan terhitung sejak tanggal ${startDate}`
+      : `Karyawan Kontrak berdasarkan Perjanjian Kerja Waktu Tertentu (PKWT) untuk jangka waktu ${durationMonths} (${durationMonths}) bulan terhitung sejak tanggal ${startDate}`;
+
+  const pasal4Content =
+    contractSubType === 'PKWT'
+      ? `1. Perjanjian Kerja Waktu Tertentu (PKWT) ini berlaku selama ${durationMonths} bulan terhitung sejak tanggal ${startDate} dan dibuat tanpa masa percobaan (tidak memberlakukan masa percobaan) sesuai ketentuan Pasal 58 ayat (1) dan (2) Undang-Undang Nomor 13 Tahun 2003 tentang Ketenagakerjaan.\n` +
+        `2. ${terminationTerms}\n` +
+        `3. Pada saat berakhirnya jangka waktu PKWT, Pihak Pertama wajib memberikan uang kompensasi PKWT kepada Pihak Kedua secara proporsional sesuai masa kerja berdasarkan Pasal 15 dan Pasal 16 Peraturan Pemerintah Nomor 35 Tahun 2021.`
+      : contractSubType === 'PKWTT'
+      ? `1. Perjanjian Kerja Waktu Tidak Tertentu (PKWTT) ini berlaku efektif sejak tanggal ${startDate} dengan ketentuan masa percobaan kerja selama ${effectiveProbationMonths} bulan (maksimal 3 bulan sesuai Pasal 60 ayat (1) Undang-Undang Nomor 13 Tahun 2003).\n` +
+        `2. Selama masa percobaan berlangsung, Pihak Pertama wajib membayar upah penuh di atas batas upah minimum yang berlaku dan tidak membebankan sanksi finansial apabila salah satu pihak mengakhiri hubungan kerja.\n` +
+        `3. ${terminationTerms}`
+      : `1. Perjanjian Kemitraan ini berlaku selama ${durationMonths} bulan terhitung sejak tanggal ${startDate} tanpa masa percobaan hubungan kerja berdasarkan asas kebebasan berkontrak Pasal 1338 KUHPerdata.\n` +
+        `2. ${terminationTerms}`;
+
+  const contractText = `${docTitle}
+Oleh ${companyName}
+${companyAddress}
+Nomor Kontrak: ${contractNumber}
+
+Pada hari ini, yang bertanda tangan di bawah ini:
+
+1. PIHAK PERTAMA (PEMBERI KERJA)
+Nama : ${hrdName}
+Jabatan : ${hrdRole} ${companyName}
+Alamat : ${companyAddress}
+Dalam hal ini bertindak untuk dan atas nama ${companyName}, selanjutnya dalam Perjanjian ini disebut sebagai PIHAK PERTAMA.
+
+2. PIHAK KEDUA (PEKERJA / KARYAWAN)
+Nama : ${employeeName}
+Nomor KTP / NIK : ${employeeNik}
+Alamat : ${employeeAddress}
+Dalam hal ini bertindak untuk dan atas nama diri sendiri, selanjutnya dalam Perjanjian ini disebut sebagai PIHAK KEDUA.
+
+Kedua belah pihak sepakat untuk mengikatkan diri dalam ${docTitle} dengan ketentuan dan pasal-pasal hukum sebagai berikut:
+
+Pasal 1 — Jabatan dan Status Hubungan Kerja
+Pihak Pertama dengan ini menerima dan mengangkat Pihak Kedua untuk bekerja di ${companyName} sebagai bagian ${employeeRole} dengan status sebagai ${statusTextPasal1}.
+
+Pasal 2 — Waktu Kerja dan Ketentuan Kehadiran
+Pihak Kedua memiliki kewajiban waktu kerja pada hari ${workDays} mulai pukul ${workHours}, yang telah mematuhi batas waktu kerja maksimal 40 (empat puluh) jam dalam 1 (satu) minggu sesuai dengan Pasal 77 ayat (2) Undang-Undang Nomor 13 Tahun 2003 tentang Ketenagakerjaan. Kelebihan jam kerja di luar jam kerja standar dihitung sebagai waktu kerja lembur sesuai regulasi yang berlaku.
+
+Pasal 3 — Ruang Lingkup Tugas dan Tanggung Jawab
+Pihak Kedua bertanggung jawab menjalankan tugas pokok sebagai ${employeeRole}, meliputi: ${duties} Segala perubahan mendasar pada ruang lingkup pekerjaan wajib disepakati secara tertulis oleh kedua belah pihak.
+
+Pasal 4 — Jangka Waktu, Kepatuhan Regulasi, dan Pengakhiran Kontrak
+${pasal4Content}
+
+Pasal 5 — Upah Pokok, Tunjangan, dan Jadwal Pembayaran
+Selama bekerja di ${companyName}, Pihak Kedua berhak menerima gaji pokok sebesar ${formattedSalary} setiap bulan yang dibayarkan melalui rekening bank Pihak Kedua selambat-lambatnya pada tanggal ${paymentDay} setiap bulannya sesuai Pasal 88 Undang-Undang Nomor 13 Tahun 2003 jo. Peraturan Pemerintah Nomor 36 Tahun 2021 tentang Pengupahan, beserta kepesertaan BPJS Kesehatan dan BPJS Ketenagakerjaan.
+
+Pasal 6 — Kerahasiaan Informasi dan Penyelesaian Perselisihan
+Pihak Kedua wajib menjaga kerahasiaan data internal perusahaan selama dan setelah hubungan kerja berakhir. Apabila terjadi perselisihan hubungan industrial, kedua belah pihak sepakat menyelesaikannya secara musyawarah untuk mufakat sesuai Undang-Undang Nomor 2 Tahun 2004 tentang Penyelesaian Perselisihan Hubungan Industrial.
+
+Demikian surat perjanjian kerja ini dibuat secara sadar, tanpa paksaan dari pihak manapun, dalam rangkap 2 (dua) bermeterai cukup yang masing-masing memiliki kekuatan hukum yang sama.
+
+Jakarta, ${startDate}
+Pihak Pertama (${hrdName} — ${companyName}) & Pihak Kedua (${employeeName})`;
+
+  const builtContract = buildContractFromAnalysis({
+    name: `${contractSubType} - ${employeeName} (${employeeRole})`,
+    company: companyName,
+    contractType: 'kerja',
+    contractText,
+    lang: params.lang || 'id',
+  });
+
+  return {
+    contractNumber,
+    contractSubType,
+    contractText,
+    effectiveProbationMonths,
+    probationGuardrailTriggered,
+    legalWarnings,
+    legalCompliance: {
+      isCompliant: builtContract.riskScore < 30,
+      riskScore: builtContract.riskScore,
+      status: builtContract.status,
+      statusId: builtContract.statusId,
+      pasal58Verified: contractSubType !== 'PKWT' || effectiveProbationMonths === 0,
+      pasal77Verified: true,
+      pp35Verified: true,
+      warnings: legalWarnings,
+    },
+    contractDraft: builtContract,
+  };
+}
+
 export default {
   LEGAL,
   SARAN,
@@ -867,4 +1097,5 @@ export default {
   analyzeContractHybrid,
   buildContractFromAnalysis,
   chatWithAnalyzedContract,
+  generateHrdContract,
 };

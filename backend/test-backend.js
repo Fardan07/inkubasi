@@ -758,6 +758,72 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
     }
   }
 
+  // 31. HRD Smart Contract Generator Endpoint (POST /api/contracts/generate)
+  try {
+    // 31a. Generate PKWT with probationMonths > 0 (Should trigger Pasal 58 guardrail & auto-correct to 0)
+    const genPkwtRes = await fetch(`${BASE_URL}/api/contracts/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        contractSubType: 'PKWT',
+        companyName: 'PT. Nusantara Teknologi Mandiri',
+        hrdName: 'Rina Wijaya',
+        hrdRole: 'HR Manager',
+        employeeName: 'Dimas Pratama',
+        employeeRole: 'Senior Frontend Engineer',
+        durationMonths: 12,
+        probationMonths: 2,
+        salary: 15000000,
+        paymentDay: 25,
+        noticePeriodDays: 30,
+      }),
+    });
+    const genPkwtData = await genPkwtRes.json();
+    assert(genPkwtRes.status === 200, 'POST /api/contracts/generate for PKWT returns 200');
+    assert(genPkwtData.success === true, 'HRD PKWT generation success is true');
+    assert(genPkwtData.data.effectiveProbationMonths === 0, 'PKWT probationMonths > 0 auto-corrected to 0');
+    assert(genPkwtData.data.probationGuardrailTriggered === true, 'PKWT probation guardrail triggered is true');
+    assert(
+      Array.isArray(genPkwtData.data.legalWarnings) &&
+        genPkwtData.data.legalWarnings.some((w) => w.includes('Pasal 58')),
+      'PKWT probation warning cites Pasal 58 UU 13/2003'
+    );
+    assert(genPkwtData.data.riskScore < 30, `Generated PKWT contract has Low Risk score (${genPkwtData.data.riskScore} < 30)`);
+    assert(genPkwtData.data.status === 'Safe', 'Generated PKWT contract status is Safe');
+    assert(
+      typeof genPkwtData.data.contractText === 'string' &&
+        genPkwtData.data.contractText.includes('PT. Nusantara Teknologi Mandiri') &&
+        genPkwtData.data.contractText.includes('Dimas Pratama'),
+      'Generated contractText includes company and employee names'
+    );
+
+    // 31b. Generate PKWTT (Karyawan Tetap) with valid 3-month probation
+    const genPkwttRes = await fetch(`${BASE_URL}/api/contracts/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        contractSubType: 'PKWTT',
+        companyName: 'PT. Nusantara Teknologi Mandiri',
+        employeeName: 'Siti Rahmawati',
+        employeeRole: 'Product Manager',
+        probationMonths: 3,
+        salary: 18000000,
+      }),
+    });
+    const genPkwttData = await genPkwttRes.json();
+    assert(genPkwttRes.status === 200, 'POST /api/contracts/generate for PKWTT returns 200');
+    assert(genPkwttData.data.effectiveProbationMonths === 3, 'PKWTT allows 3-month probation (Pasal 60 UU 13/2003)');
+    assert(genPkwttData.data.riskScore < 30, 'Generated PKWTT contract has Low Risk / Safe score');
+  } catch (err) {
+    assert(false, `HRD Smart Contract Generator test failed: ${err.message}`);
+  }
+
   console.log('\n--- TEST RESULTS SUMMARY ---');
   const passed = results.filter((r) => r.pass).length;
   const failed = results.filter((r) => !r.pass).length;

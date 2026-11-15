@@ -340,7 +340,7 @@ function SectionTitle({
   )
 }
 
-type Page = "dashboard" | "contracts" | "analysis" | "chat" | "compare" | "dates" | "settings" | "pricing" | "landing"
+type Page = "dashboard" | "contracts" | "builder" | "analysis" | "chat" | "compare" | "dates" | "settings" | "pricing" | "landing"
 type Clause = {
   id?: number
   title: string
@@ -771,6 +771,7 @@ export default function App() {
     return [
       "dashboard",
       "contracts",
+      "builder",
       "analysis",
       "chat",
       "compare",
@@ -829,8 +830,66 @@ export default function App() {
     return savedToken ? localStorage.getItem("clariq_email") || "" : ""
   })
   const [emailReminders, setEmailReminders] = useState(true)
-  const [plan, setPlan] = useState("Free")
+  const [userPlan, setUserPlan] = useState<"free" | "pro">(() => {
+    const savedPlan = (localStorage.getItem("clariq_plan") || "").toLowerCase()
+    return savedPlan === "pro" || savedPlan === "plus" || savedPlan === "hrd pro" ? "pro" : "free"
+  })
+  const [plan, setPlan] = useState<string>(() => {
+    const savedPlan = (localStorage.getItem("clariq_plan") || "").toLowerCase()
+    return savedPlan === "pro" || savedPlan === "plus" || savedPlan === "hrd pro" ? "HRD Pro" : "Free"
+  })
   const [planModal, setPlanModal] = useState<string | null>(null)
+
+  // HRD Smart Contract Generator States
+  const buildCalligraphySigSvg = (signerName: string, inkColor = "#1e3a8a") => {
+    const clean = (signerName || "Tanda Tangan").trim().slice(0, 24)
+    const fontSize = clean.length > 18 ? 16.5 : clean.length > 14 ? 19 : 21.5
+    const escaped = clean
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="75" viewBox="0 0 220 75">
+      <path d="M20 54 C 48 16, 86 64, 132 32 C 158 14, 178 48, 200 36" fill="none" stroke="${inkColor}" stroke-width="2" stroke-linecap="round" opacity="0.72"/>
+      <path d="M30 60 Q 110 48 194 56" fill="none" stroke="${inkColor}" stroke-width="1.35" stroke-linecap="round" opacity="0.65"/>
+      <text x="110" y="43" text-anchor="middle" fill="${inkColor}" font-family="'Brush Script MT', 'Segoe Script', 'Snell Roundhand', 'Georgia', cursive" font-size="${fontSize}" font-style="italic" font-weight="600" transform="rotate(-4 110 43)">${escaped}</text>
+    </svg>`
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+  }
+
+  const [hrdType, setHrdType] = useState<"PKWTT" | "PKWT" | "FREELANCE">("PKWT")
+  const [hrdCompany, setHrdCompany] = useState("PT. Nusantara Teknologi Mandiri")
+  const [hrdCompanyAddress, setHrdCompanyAddress] = useState("Jl. Jenderal Sudirman Kav. 52-53, SCBD, Jakarta Selatan")
+  const [hrdRepName, setHrdRepName] = useState("Rina Wijaya")
+  const [hrdRepRole, setHrdRepRole] = useState("HR Manager")
+  const [hrdEmpName, setHrdEmpName] = useState("Dimas Pratama")
+  const [hrdEmpNik, setHrdEmpNik] = useState("3174051208980002")
+  const [hrdEmpAddress, setHrdEmpAddress] = useState("Jl. Kemang Raya No. 18, Kebayoran Baru, Jakarta Selatan")
+  const [hrdEmpRole, setHrdEmpRole] = useState("Senior Product Designer")
+  const [hrdStartDate, setHrdStartDate] = useState("1 Desember 2026")
+  const [hrdDurationMonths, setHrdDurationMonths] = useState("12")
+  const [hrdProbationMonths, setHrdProbationMonths] = useState("3")
+  const [hrdSalary, setHrdSalary] = useState("12000000")
+  const [hrdPayDay, setHrdPayDay] = useState("25")
+  const [hrdWorkDays, setHrdWorkDays] = useState("Senin hingga Jumat (5 hari kerja)")
+  const [hrdWorkHours, setHrdWorkHours] = useState("09.00 - 17.00 WIB (40 jam/minggu)")
+  const [hrdNoticeDays, setHrdNoticeDays] = useState("30")
+  const [hrdDuties, setHrdDuties] = useState(
+    "Merancang antarmuka dan pengalaman pengguna (UI/UX) produk digital perusahaan, berkolaborasi dengan tim produk dan rekayasa perangkat lunak, serta menyusun dokumentasi sistem desain sesuai standar operasional perusahaan."
+  )
+  const [hrdTermination, setHrdTermination] = useState(
+    "Pengakhiran hubungan kerja dilakukan secara tertulis dengan masa pemberitahuan (notice period) minimal 30 hari kalender sebelumnya tanpa pengenaan denda finansial sepihak, sesuai dengan Peraturan Pemerintah Nomor 35 Tahun 2021."
+  )
+  const [hrdRepSig, setHrdRepSig] = useState<string>(() => buildCalligraphySigSvg("Rina Wijaya", "#1d4ed8"))
+  const [hrdEmpSig, setHrdEmpSig] = useState<string>(() => buildCalligraphySigSvg("Dimas Pratama", "#0f172a"))
+  const [showCompanyStamp, setShowCompanyStamp] = useState<boolean>(true)
+  const [showEmeterai, setShowEmeterai] = useState<boolean>(true)
+  const [activeSigPad, setActiveSigPad] = useState<"p1" | "p2" | null>(null)
+  const sigPadCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const isDrawingSigRef = useRef<boolean>(false)
+  const sigFileP1Ref = useRef<HTMLInputElement | null>(null)
+  const sigFileP2Ref = useRef<HTMLInputElement | null>(null)
+  const [hrdSaving, setHrdSaving] = useState(false)
   const [authModal, setAuthModal] = useState<"login" | "register" | null>(null)
   const [authName, setAuthName] = useState("")
   const [authEmail, setAuthEmail] = useState("")
@@ -977,7 +1036,18 @@ export default function App() {
         setEmail(data.user.email)
         localStorage.setItem("clariq_email", data.user.email)
       }
-      if (data.user?.plan) setPlan(data.user.plan)
+      if (data.user?.plan) {
+        const isProServer = /pro|plus|business/i.test(data.user.plan)
+        const isProLocal = (localStorage.getItem("clariq_plan") || "") === "pro"
+        if (isProServer || isProLocal) {
+          setUserPlan("pro")
+          setPlan("HRD Pro")
+          localStorage.setItem("clariq_plan", "pro")
+        } else {
+          setUserPlan("free")
+          setPlan("Free")
+        }
+      }
       setAuthModal(null)
       setAuthEmail("")
       setAuthPassword("")
@@ -1073,7 +1143,18 @@ export default function App() {
               setEmail(json.user.email)
               localStorage.setItem("clariq_email", json.user.email)
             }
-            if (json.user.plan) setPlan(json.user.plan)
+            if (json.user.plan) {
+              const isProServer = /pro|plus|business/i.test(json.user.plan)
+              const isProLocal = (localStorage.getItem("clariq_plan") || "") === "pro"
+              if (isProServer || isProLocal) {
+                setUserPlan("pro")
+                setPlan("HRD Pro")
+                localStorage.setItem("clariq_plan", "pro")
+              } else {
+                setUserPlan("free")
+                setPlan("Free")
+              }
+            }
             if (json.user.emailReminders !== undefined) setEmailReminders(json.user.emailReminders)
           } else {
             handleLogout()
@@ -1112,6 +1193,7 @@ export default function App() {
     const titles: Record<Page, string> = {
       dashboard: "Dashboard",
       contracts: "My Contracts",
+      builder: "HRD Contract Builder",
       analysis: "Contract Analysis",
       chat: "Ask Your Contract",
       compare: "Compare Contracts",
@@ -1173,6 +1255,7 @@ export default function App() {
       const validPages: Page[] = [
         "dashboard",
         "contracts",
+        "builder",
         "analysis",
         "chat",
         "compare",
@@ -1512,11 +1595,320 @@ export default function App() {
       { role: "assistant", text: answer, source },
     ])
   }
+  const activateProPlan = (navigateToBuilder = false) => {
+    setUserPlan("pro")
+    setPlan("HRD Pro")
+    localStorage.setItem("clariq_plan", "pro")
+    setPlanModal(null)
+    setToast(t.plan_activated_toast)
+    const activeToken = localStorage.getItem("clariq_token") || token
+    if (activeToken) {
+      fetch("/api/user", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${activeToken}`,
+        },
+        body: JSON.stringify({ plan: "HRD Pro" }),
+      }).catch(() => {})
+    }
+    if (navigateToBuilder) {
+      navigate("builder")
+    }
+  }
+
+  const switchToFreePlan = () => {
+    setUserPlan("free")
+    setPlan("Free")
+    localStorage.setItem("clariq_plan", "free")
+    setPlanModal(null)
+    setToast(t.plan_switched_free_toast)
+    const activeToken = localStorage.getItem("clariq_token") || token
+    if (activeToken) {
+      fetch("/api/user", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${activeToken}`,
+        },
+        body: JSON.stringify({ plan: "Free" }),
+      }).catch(() => {})
+    }
+  }
+
+  const fillSampleHrdData = () => {
+    setHrdType("PKWT")
+    setHrdCompany("PT. Nusantara Teknologi Mandiri")
+    setHrdCompanyAddress("Jl. Jenderal Sudirman Kav. 52-53, SCBD, Jakarta Selatan")
+    setHrdRepName("Rina Wijaya")
+    setHrdRepRole("HR Manager")
+    setHrdEmpName("Dimas Pratama")
+    setHrdEmpNik("3174051208980002")
+    setHrdEmpAddress("Jl. Kemang Raya No. 18, Kebayoran Baru, Jakarta Selatan")
+    setHrdEmpRole("Senior Product Designer")
+    setHrdStartDate("1 Desember 2026")
+    setHrdDurationMonths("12")
+    setHrdProbationMonths("0")
+    setHrdSalary("15000000")
+    setHrdPayDay("25")
+    setHrdWorkDays("Senin hingga Jumat (5 hari kerja)")
+    setHrdWorkHours("09.00 - 17.00 WIB (40 jam/minggu)")
+    setHrdNoticeDays("30")
+    setHrdDuties(
+      "Merancang antarmuka dan pengalaman pengguna (UI/UX) produk digital perusahaan, berkolaborasi dengan tim produk dan rekayasa perangkat lunak, serta menyusun dokumentasi sistem desain sesuai standar operasional PT. Nusantara Teknologi Mandiri."
+    )
+    setHrdTermination(
+      "Pengakhiran hubungan kerja dilakukan secara tertulis dengan masa pemberitahuan (notice period) minimal 30 hari kalender sebelumnya tanpa pengenaan denda finansial sepihak, sesuai dengan Peraturan Pemerintah Nomor 35 Tahun 2021."
+    )
+    setHrdRepSig(buildCalligraphySigSvg("Rina Wijaya", "#1d4ed8"))
+    setHrdEmpSig(buildCalligraphySigSvg("Dimas Pratama", "#0f172a"))
+    setShowCompanyStamp(true)
+    setShowEmeterai(true)
+    setActiveSigPad(null)
+    setToast(t.builder_sample_filled_toast)
+  }
+
+  const handleSigImageUpload = (party: "p1" | "p2", file?: File) => {
+    if (!file) return
+    if (!/\.(png|jpe?g|webp|svg)$/i.test(file.name)) {
+      setToast(
+        lang === "id"
+          ? "Silakan pilih gambar tanda tangan berformat PNG, JPG, atau SVG."
+          : "Please choose a PNG, JPG, or SVG signature image."
+      )
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "")
+      if (party === "p1") {
+        setHrdRepSig(dataUrl)
+      } else {
+        setHrdEmpSig(dataUrl)
+      }
+      setActiveSigPad(null)
+      setToast(
+        lang === "id"
+          ? "Gambar tanda tangan berhasil diunggah ke dokumen!"
+          : "Signature image uploaded to the document!"
+      )
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const getSigPadCoords = (
+    canvas: HTMLCanvasElement,
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / (rect.width || 1)
+    const scaleY = canvas.height / (rect.height || 1)
+    if ("touches" in e) {
+      const touch = e.touches[0] || e.changedTouches[0]
+      return {
+        x: (touch.clientX - rect.left) * scaleX,
+        y: (touch.clientY - rect.top) * scaleY,
+      }
+    }
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    }
+  }
+
+  const startSigPadDraw = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    const canvas = sigPadCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    isDrawingSigRef.current = true
+    const { x, y } = getSigPadCoords(canvas, e)
+    ctx.strokeStyle = activeSigPad === "p1" ? "#1d4ed8" : "#0f172a"
+    ctx.lineWidth = 2.4
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+  }
+
+  const moveSigPadDraw = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    if (!isDrawingSigRef.current) return
+    const canvas = sigPadCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    const { x, y } = getSigPadCoords(canvas, e)
+    ctx.lineTo(x, y)
+    ctx.stroke()
+  }
+
+  const endSigPadDraw = () => {
+    isDrawingSigRef.current = false
+  }
+
+  const clearSigPadCanvas = () => {
+    const canvas = sigPadCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    ctx?.clearRect(0, 0, canvas.width, canvas.height)
+  }
+
+  const applySigPadCanvas = (party: "p1" | "p2") => {
+    const canvas = sigPadCanvasRef.current
+    if (!canvas) return
+    const dataUrl = canvas.toDataURL("image/png")
+    if (party === "p1") {
+      setHrdRepSig(dataUrl)
+    } else {
+      setHrdEmpSig(dataUrl)
+    }
+    setActiveSigPad(null)
+    setToast(
+      lang === "id"
+        ? "Tanda tangan dari kanvas berhasil diterapkan ke dokumen!"
+        : "Drawn signature applied to the document!"
+    )
+  }
+
+  const getCompanyInitials = (compName: string) => {
+    const words = (compName || "PT")
+      .replace(/^(PT\.?|CV\.?|UD\.?|YAYASAN)\s+/i, "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+    if (words.length === 0) return "CORP"
+    return words
+      .slice(0, 3)
+      .map((w) => w[0]?.toUpperCase() || "")
+      .join("")
+  }
+
+  const formatRupiahDisplay = (val: string | number) => {
+    const num = Number(String(val).replace(/[^\d]/g, "")) || 0
+    return "Rp" + num.toLocaleString("id-ID")
+  }
+
+  const hrdContractNumber = `088/HRD-${hrdType}/${getCompanyInitials(hrdCompany)}/XI/2026`
+
+  const buildLiveHrdContractText = () => {
+    const docTitle =
+      hrdType === "PKWTT"
+        ? "SURAT PERJANJIAN KERJA WAKTU TIDAK TERTENTU (PKWTT)"
+        : hrdType === "FREELANCE"
+        ? "SURAT PERJANJIAN KEMITRAAN PEKERJA LEPAS (FREELANCE)"
+        : "SURAT PERJANJIAN KERJA WAKTU TERTENTU (PKWT)"
+
+    const statusTextPasal1 =
+      hrdType === "PKWTT"
+        ? `Karyawan Tetap berdasarkan Perjanjian Kerja Waktu Tidak Tertentu (PKWTT) terhitung sejak tanggal ${hrdStartDate}`
+        : hrdType === "FREELANCE"
+        ? `Mitra Pekerja Lepas (Freelance) untuk jangka waktu ${hrdDurationMonths || "6"} bulan terhitung sejak tanggal ${hrdStartDate}`
+        : `Karyawan Kontrak berdasarkan Perjanjian Kerja Waktu Tertentu (PKWT) untuk jangka waktu ${hrdDurationMonths || "12"} bulan terhitung sejak tanggal ${hrdStartDate}`
+
+    const effectiveProbation = hrdType === "PKWTT" ? Math.min(3, Math.max(0, Number(hrdProbationMonths) || 3)) : 0
+    const formattedSal = formatRupiahDisplay(hrdSalary || "12000000")
+
+    const pasal4Text =
+      hrdType === "PKWT"
+        ? `1. Perjanjian Kerja Waktu Tertentu (PKWT) ini berlaku selama ${hrdDurationMonths || "12"} bulan terhitung sejak tanggal ${hrdStartDate} dan dibuat tanpa masa percobaan (tidak memberlakukan masa percobaan) sesuai ketentuan Pasal 58 ayat (1) dan (2) Undang-Undang Nomor 13 Tahun 2003 tentang Ketenagakerjaan.\n2. ${hrdTermination}\n3. Pada saat berakhirnya jangka waktu PKWT, Pihak Pertama wajib memberikan uang kompensasi PKWT kepada Pihak Kedua secara proporsional sesuai masa kerja berdasarkan Pasal 15 dan Pasal 16 Peraturan Pemerintah Nomor 35 Tahun 2021.`
+        : hrdType === "PKWTT"
+        ? `1. Perjanjian Kerja Waktu Tidak Tertentu (PKWTT) ini berlaku efektif sejak tanggal ${hrdStartDate} dengan ketentuan masa percobaan kerja selama ${effectiveProbation} bulan (maksimal 3 bulan sesuai Pasal 60 ayat (1) Undang-Undang Nomor 13 Tahun 2003).\n2. Selama masa percobaan berlangsung, Pihak Pertama wajib membayar upah penuh di atas batas upah minimum yang berlaku dan tidak membebankan sanksi finansial apabila salah satu pihak mengakhiri hubungan kerja.\n3. ${hrdTermination}`
+        : `1. Perjanjian Kemitraan ini berlaku selama ${hrdDurationMonths || "6"} bulan terhitung sejak tanggal ${hrdStartDate} tanpa masa percobaan hubungan kerja berdasarkan asas kebebasan berkontrak Pasal 1338 KUHPerdata.\n2. ${hrdTermination}`
+
+    return `${docTitle}
+Oleh ${hrdCompany}
+${hrdCompanyAddress}
+Nomor Kontrak: ${hrdContractNumber}
+
+Pada hari ini, yang bertanda tangan di bawah ini:
+
+1. PIHAK PERTAMA (PEMBERI KERJA)
+Nama : ${hrdRepName}
+Jabatan : ${hrdRepRole} ${hrdCompany}
+Alamat : ${hrdCompanyAddress}
+Dalam hal ini bertindak untuk dan atas nama ${hrdCompany}, selanjutnya dalam Perjanjian ini disebut sebagai PIHAK PERTAMA.
+
+2. PIHAK KEDUA (PEKERJA / KARYAWAN)
+Nama : ${hrdEmpName}
+Nomor KTP / NIK : ${hrdEmpNik}
+Alamat : ${hrdEmpAddress}
+Dalam hal ini bertindak untuk dan atas nama diri sendiri, selanjutnya dalam Perjanjian ini disebut sebagai PIHAK KEDUA.
+
+Kedua belah pihak sepakat untuk mengikatkan diri dalam ${docTitle} dengan ketentuan dan pasal-pasal hukum sebagai berikut:
+
+Pasal 1 — Jabatan dan Status Hubungan Kerja
+Pihak Pertama dengan ini menerima dan mengangkat Pihak Kedua untuk bekerja di ${hrdCompany} sebagai bagian ${hrdEmpRole} dengan status sebagai ${statusTextPasal1}.
+
+Pasal 2 — Waktu Kerja dan Ketentuan Kehadiran
+Pihak Kedua memiliki kewajiban waktu kerja pada hari ${hrdWorkDays} mulai pukul ${hrdWorkHours}, yang telah mematuhi batas waktu kerja maksimal 40 (empat puluh) jam dalam 1 (satu) minggu sesuai dengan Pasal 77 ayat (2) Undang-Undang Nomor 13 Tahun 2003 tentang Ketenagakerjaan. Kelebihan jam kerja di luar jam kerja standar dihitung sebagai waktu kerja lembur sesuai regulasi yang berlaku.
+
+Pasal 3 — Ruang Lingkup Tugas dan Tanggung Jawab
+Pihak Kedua bertanggung jawab menjalankan tugas pokok sebagai ${hrdEmpRole}, meliputi: ${hrdDuties} Segala perubahan mendasar pada ruang lingkup pekerjaan wajib disetujui secara tertulis oleh kedua belah pihak.
+
+Pasal 4 — Jangka Waktu, Kepatuhan Regulasi, dan Pengakhiran Kontrak
+${pasal4Text}
+
+Pasal 5 — Upah Pokok, Tunjangan, dan Jadwal Pembayaran
+Selama bekerja di ${hrdCompany}, Pihak Kedua berhak menerima gaji pokok sebesar ${formattedSal} setiap bulan yang dibayarkan melalui rekening bank Pihak Kedua selambat-lambatnya pada tanggal ${hrdPayDay || "25"} setiap bulannya sesuai Pasal 88 Undang-Undang Nomor 13 Tahun 2003 jo. Peraturan Pemerintah Nomor 36 Tahun 2021 tentang Pengupahan, beserta kepesertaan BPJS Kesehatan dan BPJS Ketenagakerjaan.
+
+Pasal 6 — Kerahasiaan Informasi dan Penyelesaian Perselisihan
+Pihak Kedua wajib menjaga kerahasiaan data internal perusahaan selama dan setelah hubungan kerja berakhir. Apabila terjadi perselisihan hubungan industrial, kedua belah pihak sepakat menyelesaikannya secara musyawarah untuk mufakat sesuai Undang-Undang Nomor 2 Tahun 2004 tentang Penyelesaian Perselisihan Hubungan Industrial.
+
+Demikian surat perjanjian kerja ini dibuat secara sadar, tanpa paksaan dari pihak manapun, dalam rangkap 2 (dua) bermeterai cukup yang masing-masing memiliki kekuatan hukum yang sama.
+
+Jakarta, ${hrdStartDate}
+Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
+  }
+
+  const saveAndAnalyzeHrdContract = async () => {
+    setHrdSaving(true)
+    const fullText = buildLiveHrdContractText()
+    const docName = `${hrdType} - ${hrdEmpName || "Karyawan"} (${hrdEmpRole || "Posisi"})`
+    const activeToken = localStorage.getItem("clariq_token") || token
+    try {
+      const res = await fetch("/api/contracts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+        },
+        body: JSON.stringify({
+          name: docName,
+          company: hrdCompany,
+          fileName: `${hrdContractNumber.replace(/\//g, "-")}.pdf`,
+          contractType: "kerja",
+          contractText: fullText,
+          useAICheck: true,
+          lang,
+        }),
+      })
+      const json = await res.json()
+      setHrdSaving(false)
+      if (res.ok && json.success && json.data) {
+        setContracts((prev) => [json.data, ...prev])
+        setSelected(json.data)
+        navigate("analysis")
+        setToast(t.builder_saved_toast)
+        loadUserData(activeToken)
+      } else {
+        setToast(json.message || (lang === "id" ? "Gagal menyimpan draf kontrak." : "Failed to save contract draft."))
+      }
+    } catch {
+      setHrdSaving(false)
+      setToast(lang === "id" ? "Terjadi kesalahan jaringan saat menyimpan kontrak." : "Network error saving contract.")
+    }
+  }
+
   const navItems: {
     label: string
     icon: IconName
     page: Page
     count?: string
+    isPro?: boolean
   }[] = [
     { label: t.nav_dashboard, icon: "grid", page: "dashboard" },
     {
@@ -1524,6 +1916,12 @@ export default function App() {
       icon: "file",
       page: "contracts",
       count: contracts.length > 0 ? String(contracts.length) : undefined,
+    },
+    {
+      label: t.nav_builder,
+      icon: "spark",
+      page: "builder",
+      isPro: true,
     },
     { label: t.nav_compare, icon: "compare", page: "compare" },
     {
@@ -1683,7 +2081,11 @@ export default function App() {
               <span className="workspace-avatar">P</span>
               <span>
                 <b>{t.nav_personal_workspace}</b>
-                <small>{plan} {t.nav_plan_suffix}</small>
+                {userPlan === "pro" ? (
+                  <small className="workspace-plan-pro">{t.plan_badge_pro}</small>
+                ) : (
+                  <small className="workspace-plan-free">{t.plan_badge_free}</small>
+                )}
               </span>
               <span className="workspace-chevron">
                 <Icon name="chevron" size={14} />
@@ -1705,7 +2107,8 @@ export default function App() {
                 >
                   <Icon name={item.icon} size={19} />
                   <span>{item.label}</span>
-                  {item.count && <small>{item.count}</small>}
+                  {item.isPro && <small className="nav-pro-badge">PRO</small>}
+                  {!item.isPro && item.count && <small>{item.count}</small>}
                 </button>
               ))}
             </nav>
@@ -1718,7 +2121,7 @@ export default function App() {
                 <p>
                   {t.nav_upgrade_desc}
                 </p>
-                <button onClick={() => navigate("pricing")}>
+                <button onClick={() => setPlanModal("HRD Pro")}>
                   {t.nav_explore_plans}
                   <Icon name="arrow" size={15} />
                 </button>
@@ -1885,6 +2288,7 @@ export default function App() {
                     {
                       dashboard: t.breadcrumb_dashboard,
                       contracts: t.breadcrumb_contracts,
+                      builder: t.breadcrumb_builder,
                       analysis: t.breadcrumb_analysis,
                       chat: t.breadcrumb_chat,
                       compare: t.breadcrumb_compare,
@@ -2333,6 +2737,857 @@ export default function App() {
                 <Icon name="shield" size={16} />
                 {t.library_demo_note}
               </div>
+            </>
+          )}
+          {page === "builder" && (
+            <>
+              <div className="page-heading">
+                <div>
+                  <span className="greeting-eyebrow">
+                    {t.builder_eyebrow}
+                  </span>
+                  <h1>
+                    {t.builder_title}<span className="greeting-dot">.</span>
+                  </h1>
+                  <p>{t.builder_sub}</p>
+                </div>
+                {userPlan === "pro" && (
+                  <Button variant="secondary" icon="spark" onClick={fillSampleHrdData}>
+                    {t.builder_fill_sample_btn}
+                  </Button>
+                )}
+              </div>
+
+              {userPlan !== "pro" ? (
+                <section className="hrd-paywall-card">
+                  <span className="hrd-paywall-badge">
+                    <Icon name="spark" size={14} />
+                    {t.builder_paywall_badge}
+                  </span>
+                  <h2>{t.builder_paywall_title}</h2>
+                  <p>{t.builder_paywall_desc}</p>
+
+                  <div className="hrd-paywall-features">
+                    <div className="hrd-paywall-feature-item">
+                      <span className="stat-icon blue">
+                        <Icon name="shield" size={20} />
+                      </span>
+                      <h4>{t.builder_paywall_b1_title}</h4>
+                      <p>{t.builder_paywall_b1_desc}</p>
+                    </div>
+                    <div className="hrd-paywall-feature-item">
+                      <span className="stat-icon mint">
+                        <Icon name="check" size={20} />
+                      </span>
+                      <h4>{t.builder_paywall_b2_title}</h4>
+                      <p>{t.builder_paywall_b2_desc}</p>
+                    </div>
+                    <div className="hrd-paywall-feature-item">
+                      <span className="stat-icon lavender">
+                        <Icon name="file" size={20} />
+                      </span>
+                      <h4>{t.builder_paywall_b3_title}</h4>
+                      <p>{t.builder_paywall_b3_desc}</p>
+                    </div>
+                  </div>
+
+                  <div className="hrd-paywall-actions">
+                    <Button icon="spark" onClick={() => activateProPlan(false)}>
+                      {t.builder_paywall_upgrade_btn}
+                      <Icon name="arrow" size={16} />
+                    </Button>
+                    <Button variant="secondary" onClick={() => setPlanModal("HRD Pro")}>
+                      {t.builder_paywall_compare_btn}
+                    </Button>
+                  </div>
+                </section>
+              ) : (
+                <div className="hrd-builder-grid">
+                  {/* KOLOM KIRI: FORMULIR KONFIGURASI KONTRAK HRD */}
+                  <section className="hrd-form-card">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
+                      <div>
+                        <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 4px", color: "var(--color-navy)" }}>
+                          {t.builder_form_title}
+                        </h2>
+                        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>
+                          {t.builder_form_sub}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 1. Jenis Perjanjian */}
+                    <div className="hrd-form-section">
+                      <h3>{t.builder_sec_type}</h3>
+                      <div className="hrd-type-tabs" role="radiogroup" aria-label={t.builder_sec_type}>
+                        <button
+                          type="button"
+                          className={`hrd-type-tab ${hrdType === "PKWTT" ? "active" : ""}`}
+                          onClick={() => {
+                            setHrdType("PKWTT")
+                            if (hrdProbationMonths === "0") setHrdProbationMonths("3")
+                          }}
+                        >
+                          {t.builder_type_pkwtt}
+                        </button>
+                        <button
+                          type="button"
+                          className={`hrd-type-tab ${hrdType === "PKWT" ? "active" : ""}`}
+                          onClick={() => {
+                            setHrdType("PKWT")
+                            setHrdProbationMonths("0")
+                          }}
+                        >
+                          {t.builder_type_pkwt}
+                        </button>
+                        <button
+                          type="button"
+                          className={`hrd-type-tab ${hrdType === "FREELANCE" ? "active" : ""}`}
+                          onClick={() => {
+                            setHrdType("FREELANCE")
+                            setHrdProbationMonths("0")
+                          }}
+                        >
+                          {t.builder_type_freelance}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 2. Identitas Perusahaan & HRD */}
+                    <div className="hrd-form-section">
+                      <h3>{t.builder_sec_company}</h3>
+                      <div className="hrd-field">
+                        <label>{t.builder_company_name}</label>
+                        <input
+                          type="text"
+                          value={hrdCompany}
+                          onChange={(e) => setHrdCompany(e.target.value)}
+                        />
+                      </div>
+                      <div className="hrd-field">
+                        <label>{t.builder_company_address}</label>
+                        <input
+                          type="text"
+                          value={hrdCompanyAddress}
+                          onChange={(e) => setHrdCompanyAddress(e.target.value)}
+                        />
+                      </div>
+                      <div className="hrd-input-grid">
+                        <div className="hrd-field">
+                          <label>{t.builder_hrd_name}</label>
+                          <input
+                            type="text"
+                            value={hrdRepName}
+                            onChange={(e) => setHrdRepName(e.target.value)}
+                          />
+                        </div>
+                        <div className="hrd-field">
+                          <label>{t.builder_hrd_role}</label>
+                          <input
+                            type="text"
+                            value={hrdRepRole}
+                            onChange={(e) => setHrdRepRole(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. Identitas Karyawan */}
+                    <div className="hrd-form-section">
+                      <h3>{t.builder_sec_employee}</h3>
+                      <div className="hrd-input-grid">
+                        <div className="hrd-field">
+                          <label>{t.builder_emp_name}</label>
+                          <input
+                            type="text"
+                            value={hrdEmpName}
+                            onChange={(e) => setHrdEmpName(e.target.value)}
+                          />
+                        </div>
+                        <div className="hrd-field">
+                          <label>{t.builder_emp_nik}</label>
+                          <input
+                            type="text"
+                            value={hrdEmpNik}
+                            onChange={(e) => setHrdEmpNik(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="hrd-field">
+                        <label>{t.builder_emp_address}</label>
+                        <input
+                          type="text"
+                          value={hrdEmpAddress}
+                          onChange={(e) => setHrdEmpAddress(e.target.value)}
+                        />
+                      </div>
+                      <div className="hrd-input-grid">
+                        <div className="hrd-field">
+                          <label>{t.builder_emp_role}</label>
+                          <input
+                            type="text"
+                            value={hrdEmpRole}
+                            onChange={(e) => setHrdEmpRole(e.target.value)}
+                          />
+                        </div>
+                        <div className="hrd-field">
+                          <label>{t.builder_start_date}</label>
+                          <input
+                            type="text"
+                            value={hrdStartDate}
+                            onChange={(e) => setHrdStartDate(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 4. Durasi Kontrak & Masa Percobaan (SMART LEGAL GUARDRAIL) */}
+                    <div className="hrd-form-section">
+                      <h3>{t.builder_sec_duration}</h3>
+                      <div className="hrd-input-grid">
+                        {hrdType !== "PKWTT" && (
+                          <div className="hrd-field">
+                            <label>{t.builder_duration_months}</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={60}
+                              value={hrdDurationMonths}
+                              onChange={(e) => setHrdDurationMonths(e.target.value)}
+                            />
+                          </div>
+                        )}
+                        <div className="hrd-field" style={{ gridColumn: hrdType === "PKWTT" ? "1 / -1" : undefined }}>
+                          <label>{t.builder_probation_months}</label>
+                          {hrdType === "PKWTT" ? (
+                            <select
+                              value={hrdProbationMonths}
+                              onChange={(e) => setHrdProbationMonths(e.target.value)}
+                            >
+                              <option value="0">0 {lang === "id" ? "Bulan (Tanpa Masa Percobaan)" : "Months (No Probation)"}</option>
+                              <option value="1">1 {lang === "id" ? "Bulan" : "Month"}</option>
+                              <option value="2">2 {lang === "id" ? "Bulan" : "Months"}</option>
+                              <option value="3">3 {lang === "id" ? "Bulan (Batas Maksimal Pasal 60 UU 13/2003)" : "Months (Max Limit Art. 60 Law 13/2003)"}</option>
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              disabled
+                              value={t.builder_probation_locked_value}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {hrdType === "PKWT" && (
+                        <div className="hrd-guardrail-box warning" role="status">
+                          <span>{t.builder_guardrail_pkwt}</span>
+                        </div>
+                      )}
+                      {hrdType === "PKWTT" && (
+                        <div className="hrd-guardrail-box safe" role="status">
+                          <span>{t.builder_guardrail_pkwtt}</span>
+                        </div>
+                      )}
+                      {hrdType === "FREELANCE" && (
+                        <div className="hrd-guardrail-box safe" role="status">
+                          <span>{t.builder_guardrail_freelance}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 5. Kompensasi & Jam Kerja */}
+                    <div className="hrd-form-section">
+                      <h3>{t.builder_sec_comp}</h3>
+                      <div className="hrd-compliance-pill">
+                        <Icon name="check" size={14} />
+                        <span>{t.builder_hours_compliance}</span>
+                      </div>
+                      <div className="hrd-input-grid">
+                        <div className="hrd-field">
+                          <label>{t.builder_salary} ({formatRupiahDisplay(hrdSalary)})</label>
+                          <input
+                            type="number"
+                            min={1000000}
+                            step={500000}
+                            value={hrdSalary}
+                            onChange={(e) => setHrdSalary(e.target.value)}
+                          />
+                        </div>
+                        <div className="hrd-field">
+                          <label>{t.builder_pay_day}</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={31}
+                            value={hrdPayDay}
+                            onChange={(e) => setHrdPayDay(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="hrd-input-grid">
+                        <div className="hrd-field">
+                          <label>{t.builder_work_days}</label>
+                          <input
+                            type="text"
+                            value={hrdWorkDays}
+                            onChange={(e) => setHrdWorkDays(e.target.value)}
+                          />
+                        </div>
+                        <div className="hrd-field">
+                          <label>{t.builder_work_hours}</label>
+                          <input
+                            type="text"
+                            value={hrdWorkHours}
+                            onChange={(e) => setHrdWorkHours(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="hrd-field">
+                        <label>{t.builder_notice_period}</label>
+                        <input
+                          type="number"
+                          min={14}
+                          max={90}
+                          value={hrdNoticeDays}
+                          onChange={(e) => setHrdNoticeDays(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 6. Deskripsi Tugas & Pengakhiran Kontrak */}
+                    <div className="hrd-form-section">
+                      <h3>{t.builder_sec_duties}</h3>
+                      <div className="hrd-field">
+                        <label>{t.builder_duties_label}</label>
+                        <textarea
+                          rows={3}
+                          value={hrdDuties}
+                          onChange={(e) => setHrdDuties(e.target.value)}
+                        />
+                      </div>
+                      <div className="hrd-field">
+                        <label>{t.builder_term_label}</label>
+                        <textarea
+                          rows={3}
+                          value={hrdTermination}
+                          onChange={(e) => setHrdTermination(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 7. Tanda Tangan Digital, Stempel & E-Meterai (Siap Download) */}
+                    <div className="hrd-form-section">
+                      <h3>{t.builder_sec_signatures}</h3>
+                      <p style={{ fontSize: 11.5, color: "#64748b", margin: "-6px 0 10px" }}>
+                        {t.builder_sig_sub}
+                      </p>
+
+                      <input
+                        ref={sigFileP1Ref}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          handleSigImageUpload("p1", e.target.files?.[0])
+                          e.target.value = ""
+                        }}
+                      />
+                      <input
+                        ref={sigFileP2Ref}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          handleSigImageUpload("p2", e.target.files?.[0])
+                          e.target.value = ""
+                        }}
+                      />
+
+                      <div className="hrd-sig-config-grid">
+                        {/* Pihak Pertama (HRD / Perusahaan) */}
+                        <div className="hrd-sig-card">
+                          <div className="hrd-sig-card-head">
+                            <strong>1. {t.builder_sig_p1_title}</strong>
+                            <span style={{ fontSize: 11, color: "#64748b" }}>{hrdRepName}</span>
+                          </div>
+                          <div className="hrd-sig-btn-row">
+                            <button
+                              type="button"
+                              className="hrd-sig-mini-btn"
+                              onClick={() => sigFileP1Ref.current?.click()}
+                            >
+                              {t.builder_sig_upload_btn}
+                            </button>
+                            <button
+                              type="button"
+                              className="hrd-sig-mini-btn"
+                              onClick={() => setActiveSigPad(activeSigPad === "p1" ? null : "p1")}
+                            >
+                              {t.builder_sig_draw_btn}
+                            </button>
+                            <button
+                              type="button"
+                              className="hrd-sig-mini-btn"
+                              onClick={() => {
+                                setHrdRepSig(buildCalligraphySigSvg(hrdRepName || "HRD", "#1d4ed8"))
+                                setActiveSigPad(null)
+                              }}
+                            >
+                              {t.builder_sig_auto_btn}
+                            </button>
+                            {hrdRepSig && (
+                              <button
+                                type="button"
+                                className="hrd-sig-mini-btn danger"
+                                onClick={() => setHrdRepSig("")}
+                              >
+                                {t.builder_sig_clear_btn}
+                              </button>
+                            )}
+                          </div>
+
+                          {activeSigPad === "p1" && (
+                            <div className="hrd-sig-pad-box">
+                              <small style={{ display: "block", fontSize: 11, color: "#475569", marginBottom: 6 }}>
+                                {t.builder_sig_pad_hint}
+                              </small>
+                              <canvas
+                                ref={sigPadCanvasRef}
+                                width={340}
+                                height={100}
+                                className="hrd-sig-pad-canvas"
+                                onMouseDown={startSigPadDraw}
+                                onMouseMove={moveSigPadDraw}
+                                onMouseUp={endSigPadDraw}
+                                onMouseLeave={endSigPadDraw}
+                                onTouchStart={startSigPadDraw}
+                                onTouchMove={moveSigPadDraw}
+                                onTouchEnd={endSigPadDraw}
+                              />
+                              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                <button
+                                  type="button"
+                                  className="hrd-sig-mini-btn"
+                                  onClick={() => applySigPadCanvas("p1")}
+                                >
+                                  ✅ {t.builder_sig_pad_apply}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="hrd-sig-mini-btn"
+                                  onClick={clearSigPadCanvas}
+                                >
+                                  {t.builder_sig_pad_clear}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {hrdRepSig && (
+                            <div className="hrd-sig-preview-thumb">
+                              <img src={hrdRepSig} alt="Preview TTD Pihak Pertama" />
+                              <span style={{ fontSize: 10.5, color: "#16a34a", fontWeight: 600 }}>
+                                ✓ Aktif di Dokumen
+                              </span>
+                            </div>
+                          )}
+
+                          <label className="hrd-sig-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={showCompanyStamp}
+                              onChange={(e) => setShowCompanyStamp(e.target.checked)}
+                            />
+                            <span>{t.builder_sig_stamp_check}</span>
+                          </label>
+                        </div>
+
+                        {/* Pihak Kedua (Karyawan) & E-Meterai */}
+                        <div className="hrd-sig-card">
+                          <div className="hrd-sig-card-head">
+                            <strong>2. {t.builder_sig_p2_title}</strong>
+                            <span style={{ fontSize: 11, color: "#64748b" }}>{hrdEmpName}</span>
+                          </div>
+                          <div className="hrd-sig-btn-row">
+                            <button
+                              type="button"
+                              className="hrd-sig-mini-btn"
+                              onClick={() => sigFileP2Ref.current?.click()}
+                            >
+                              {t.builder_sig_upload_btn}
+                            </button>
+                            <button
+                              type="button"
+                              className="hrd-sig-mini-btn"
+                              onClick={() => setActiveSigPad(activeSigPad === "p2" ? null : "p2")}
+                            >
+                              {t.builder_sig_draw_btn}
+                            </button>
+                            <button
+                              type="button"
+                              className="hrd-sig-mini-btn"
+                              onClick={() => {
+                                setHrdEmpSig(buildCalligraphySigSvg(hrdEmpName || "Karyawan", "#0f172a"))
+                                setActiveSigPad(null)
+                              }}
+                            >
+                              {t.builder_sig_auto_btn}
+                            </button>
+                            {hrdEmpSig && (
+                              <button
+                                type="button"
+                                className="hrd-sig-mini-btn danger"
+                                onClick={() => setHrdEmpSig("")}
+                              >
+                                {t.builder_sig_clear_btn}
+                              </button>
+                            )}
+                          </div>
+
+                          {activeSigPad === "p2" && (
+                            <div className="hrd-sig-pad-box">
+                              <small style={{ display: "block", fontSize: 11, color: "#475569", marginBottom: 6 }}>
+                                {t.builder_sig_pad_hint}
+                              </small>
+                              <canvas
+                                ref={sigPadCanvasRef}
+                                width={340}
+                                height={100}
+                                className="hrd-sig-pad-canvas"
+                                onMouseDown={startSigPadDraw}
+                                onMouseMove={moveSigPadDraw}
+                                onMouseUp={endSigPadDraw}
+                                onMouseLeave={endSigPadDraw}
+                                onTouchStart={startSigPadDraw}
+                                onTouchMove={moveSigPadDraw}
+                                onTouchEnd={endSigPadDraw}
+                              />
+                              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                <button
+                                  type="button"
+                                  className="hrd-sig-mini-btn"
+                                  onClick={() => applySigPadCanvas("p2")}
+                                >
+                                  ✅ {t.builder_sig_pad_apply}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="hrd-sig-mini-btn"
+                                  onClick={clearSigPadCanvas}
+                                >
+                                  {t.builder_sig_pad_clear}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {hrdEmpSig && (
+                            <div className="hrd-sig-preview-thumb">
+                              <img src={hrdEmpSig} alt="Preview TTD Pihak Kedua" />
+                              <span style={{ fontSize: 10.5, color: "#16a34a", fontWeight: 600 }}>
+                                ✓ Aktif di Dokumen
+                              </span>
+                            </div>
+                          )}
+
+                          <label className="hrd-sig-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={showEmeterai}
+                              onChange={(e) => setShowEmeterai(e.target.checked)}
+                            />
+                            <span>{t.builder_sig_emeterai_check}</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 14 }}>
+                        <Button
+                          variant="secondary"
+                          icon="spark"
+                          className="full-width"
+                          onClick={fillSampleHrdData}
+                        >
+                          {t.builder_fill_sample_btn}
+                        </Button>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* KOLOM KANAN: STICKY LIVE PREVIEW DOKUMEN HUKUM RESMI (SCROLLABLE MANDIRI) */}
+                  <div className="legal-document-wrapper">
+                    <div className="legal-document-toolbar">
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Badge status={t.builder_preview_compliant} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>
+                          {t.builder_preview_badge}
+                        </span>
+                      </div>
+                      <div className="legal-document-actions">
+                        <Button
+                          icon="spark"
+                          disabled={hrdSaving}
+                          onClick={saveAndAnalyzeHrdContract}
+                        >
+                          {hrdSaving ? t.builder_btn_saving : t.builder_btn_save_analyze}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          icon="download"
+                          onClick={() => window.print()}
+                        >
+                          {t.builder_btn_print}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          icon="file"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(buildLiveHrdContractText())
+                            setToast(t.builder_copied_toast)
+                          }}
+                        >
+                          {t.builder_btn_copy}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="legal-document-desk preview-scroll-area">
+                      <article className="legal-document-paper contract-paper" aria-label="Live Preview Surat Kontrak Kerja">
+                        {/* 1. KOP SURAT PERUSAHAAN RESMI (OFFICIAL CORPORATE LETTERHEAD) */}
+                        <header className="legal-doc-letterhead">
+                          <div className="letterhead-logo-badge" aria-hidden="true">
+                            <span>{getCompanyInitials(hrdCompany)}</span>
+                            <small>CORP</small>
+                          </div>
+                          <div className="letterhead-text-center">
+                            <h2 className="letterhead-company-name">{hrdCompany}</h2>
+                            <p className="letterhead-company-address">{hrdCompanyAddress}</p>
+                            <p className="letterhead-company-contact">
+                              Divisi Human Capital &amp; Legal · Dokumen Kepegawaian Resmi Republik Indonesia
+                            </p>
+                          </div>
+                        </header>
+
+                        {/* 2. JUDUL & NOMOR SURAT FORMAL */}
+                        <div className="legal-doc-title-block">
+                          <h3 className="legal-doc-main-title">
+                            {hrdType === "PKWTT"
+                              ? "SURAT PERJANJIAN KERJA WAKTU TIDAK TERTENTU (PKWTT)"
+                              : hrdType === "FREELANCE"
+                              ? "SURAT PERJANJIAN KEMITRAAN PEKERJA LEPAS (FREELANCE)"
+                              : "SURAT PERJANJIAN KERJA WAKTU TERTENTU (PKWT)"}
+                          </h3>
+                          <p className="legal-doc-number-line">Nomor: {hrdContractNumber}</p>
+                        </div>
+
+                        {/* 3. KOMPARISI / IDENTITAS PARA PIHAK (FORMAT TABEL HUKUM TANPA KOTAK WEB) */}
+                        <div className="legal-doc-parties">
+                          <p>Pada hari ini, yang bertanda tangan di bawah ini:</p>
+
+                          <div className="legal-doc-party-section">
+                            <div className="legal-doc-party-heading">I. PIHAK PERTAMA (PEMBERI KERJA)</div>
+                            <table className="legal-doc-party-table">
+                              <tbody>
+                                <tr>
+                                  <td className="party-label">Nama</td>
+                                  <td className="party-colon">:</td>
+                                  <td><b>{hrdRepName}</b></td>
+                                </tr>
+                                <tr>
+                                  <td className="party-label">Jabatan</td>
+                                  <td className="party-colon">:</td>
+                                  <td>{hrdRepRole} — {hrdCompany}</td>
+                                </tr>
+                                <tr>
+                                  <td className="party-label">Alamat</td>
+                                  <td className="party-colon">:</td>
+                                  <td>{hrdCompanyAddress}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                            <p className="legal-doc-party-desc">
+                              Dalam hal ini bertindak untuk dan atas nama <b>{hrdCompany}</b>, selanjutnya dalam Perjanjian ini disebut sebagai <b>PIHAK PERTAMA</b>.
+                            </p>
+                          </div>
+
+                          <div className="legal-doc-party-section">
+                            <div className="legal-doc-party-heading">II. PIHAK KEDUA (PEKERJA / KARYAWAN)</div>
+                            <table className="legal-doc-party-table">
+                              <tbody>
+                                <tr>
+                                  <td className="party-label">Nama</td>
+                                  <td className="party-colon">:</td>
+                                  <td><b>{hrdEmpName}</b></td>
+                                </tr>
+                                <tr>
+                                  <td className="party-label">Nomor KTP / NIK</td>
+                                  <td className="party-colon">:</td>
+                                  <td>{hrdEmpNik}</td>
+                                </tr>
+                                <tr>
+                                  <td className="party-label">Jabatan / Posisi</td>
+                                  <td className="party-colon">:</td>
+                                  <td>{hrdEmpRole}</td>
+                                </tr>
+                                <tr>
+                                  <td className="party-label">Alamat</td>
+                                  <td className="party-colon">:</td>
+                                  <td>{hrdEmpAddress}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                            <p className="legal-doc-party-desc">
+                              Dalam hal ini bertindak untuk dan atas nama diri sendiri, selanjutnya dalam Perjanjian ini disebut sebagai <b>PIHAK KEDUA</b>.
+                            </p>
+                          </div>
+
+                          <p>
+                            Kedua belah pihak sepakat untuk mengikatkan diri dalam Perjanjian Kerja ini dengan ketentuan dan pasal-pasal hukum sebagai berikut:
+                          </p>
+                        </div>
+
+                        {/* 4. PASAL-PASAL KONTRAK */}
+                        <div className="legal-doc-article contract-clause-item">
+                          <h4>Pasal 1<br />Jabatan dan Status Hubungan Kerja</h4>
+                          <p>
+                            Pihak Pertama dengan ini menerima dan mengangkat Pihak Kedua untuk bekerja di <b>{hrdCompany}</b> sebagai bagian <b>{hrdEmpRole}</b> dengan status sebagai{" "}
+                            {hrdType === "PKWTT"
+                              ? `Karyawan Tetap berdasarkan Perjanjian Kerja Waktu Tidak Tertentu (PKWTT) terhitung sejak tanggal ${hrdStartDate}.`
+                              : hrdType === "FREELANCE"
+                              ? `Mitra Pekerja Lepas (Freelance) untuk jangka waktu ${hrdDurationMonths || "6"} bulan terhitung sejak tanggal ${hrdStartDate}.`
+                              : `Karyawan Kontrak berdasarkan Perjanjian Kerja Waktu Tertentu (PKWT) untuk jangka waktu ${hrdDurationMonths || "12"} bulan terhitung sejak tanggal ${hrdStartDate}.`}
+                          </p>
+                        </div>
+
+                        <div className="legal-doc-article contract-clause-item">
+                          <h4>Pasal 2<br />Waktu Kerja dan Ketentuan Kehadiran</h4>
+                          <p>
+                            Pihak Kedua memiliki kewajiban waktu kerja pada hari <b>{hrdWorkDays}</b> mulai pukul <b>{hrdWorkHours}</b>, yang telah mematuhi batas waktu kerja maksimal 40 (empat puluh) jam dalam 1 (satu) minggu sesuai dengan <b>Pasal 77 ayat (2) Undang-Undang Nomor 13 Tahun 2003</b> tentang Ketenagakerjaan. Kelebihan jam kerja di luar jam kerja standar dihitung sebagai waktu kerja lembur sesuai regulasi yang berlaku.
+                          </p>
+                        </div>
+
+                        <div className="legal-doc-article contract-clause-item">
+                          <h4>Pasal 3<br />Ruang Lingkup Tugas dan Tanggung Jawab</h4>
+                          <p>
+                            Pihak Kedua bertanggung jawab menjalankan tugas pokok sebagai <b>{hrdEmpRole}</b>, meliputi: {hrdDuties} Segala perubahan mendasar pada ruang lingkup pekerjaan wajib disetujui secara tertulis oleh kedua belah pihak.
+                          </p>
+                        </div>
+
+                        <div className="legal-doc-article contract-clause-item">
+                          <h4>Pasal 4<br />Jangka Waktu, Kepatuhan Regulasi, dan Pengakhiran Kontrak</h4>
+                          {hrdType === "PKWT" ? (
+                            <>
+                              <p>
+                                1. Perjanjian Kerja Waktu Tertentu (PKWT) ini berlaku selama <b>{hrdDurationMonths || "12"} bulan</b> terhitung sejak tanggal <b>{hrdStartDate}</b> dan dibuat <b>tanpa masa percobaan (tidak memberlakukan masa percobaan)</b> sesuai ketentuan <b>Pasal 58 ayat (1) dan (2) Undang-Undang Nomor 13 Tahun 2003</b> tentang Ketenagakerjaan.
+                              </p>
+                              <p>2. {hrdTermination}</p>
+                              <p>
+                                3. Pada saat berakhirnya jangka waktu PKWT, Pihak Pertama wajib memberikan <b>uang kompensasi PKWT</b> kepada Pihak Kedua secara proporsional sesuai masa kerja berdasarkan <b>Pasal 15 dan Pasal 16 Peraturan Pemerintah Nomor 35 Tahun 2021</b>.
+                              </p>
+                            </>
+                          ) : hrdType === "PKWTT" ? (
+                            <>
+                              <p>
+                                1. Perjanjian Kerja Waktu Tidak Tertentu (PKWTT) ini berlaku efektif sejak tanggal <b>{hrdStartDate}</b> dengan ketentuan masa percobaan kerja selama <b>{hrdProbationMonths} bulan</b> (maksimal 3 bulan sesuai <b>Pasal 60 ayat (1) Undang-Undang Nomor 13 Tahun 2003</b>).
+                              </p>
+                              <p>
+                                2. Selama masa percobaan berlangsung, Pihak Pertama wajib membayar upah penuh di atas batas upah minimum yang berlaku dan tidak membebankan sanksi finansial apabila salah satu pihak mengakhiri hubungan kerja.
+                              </p>
+                              <p>3. {hrdTermination}</p>
+                            </>
+                          ) : (
+                            <>
+                              <p>
+                                1. Perjanjian Kemitraan ini berlaku selama <b>{hrdDurationMonths || "6"} bulan</b> terhitung sejak tanggal <b>{hrdStartDate}</b> tanpa masa percobaan hubungan kerja berdasarkan asas kebebasan berkontrak <b>Pasal 1338 KUHPerdata</b>.
+                              </p>
+                              <p>2. {hrdTermination}</p>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="legal-doc-article contract-clause-item">
+                          <h4>Pasal 5<br />Upah Pokok, Tunjangan, dan Jadwal Pembayaran</h4>
+                          <p>
+                            Selama bekerja di <b>{hrdCompany}</b>, Pihak Kedua berhak menerima gaji pokok sebesar <b>{formatRupiahDisplay(hrdSalary)}</b> setiap bulan yang dibayarkan melalui rekening bank Pihak Kedua selambat-lambatnya pada tanggal <b>{hrdPayDay || "25"}</b> setiap bulannya sesuai <b>Pasal 88 Undang-Undang Nomor 13 Tahun 2003 jo. Peraturan Pemerintah Nomor 36 Tahun 2021</b> tentang Pengupahan, beserta kepesertaan BPJS Kesehatan dan BPJS Ketenagakerjaan.
+                          </p>
+                        </div>
+
+                        <div className="legal-doc-article contract-clause-item">
+                          <h4>Pasal 6<br />Kerahasiaan Informasi dan Penyelesaian Perselisihan</h4>
+                          <p>
+                            Pihak Kedua wajib menjaga kerahasiaan data internal perusahaan selama dan setelah hubungan kerja berakhir. Apabila terjadi perselisihan hubungan industrial, kedua belah pihak sepakat menyelesaikannya secara musyawarah untuk mufakat sesuai <b>Undang-Undang Nomor 2 Tahun 2004</b> tentang Penyelesaian Perselisihan Hubungan Industrial.
+                          </p>
+                        </div>
+
+                        {/* 5. BLOK PENUTUP & TANDA TANGAN ANTI-TERPOTONG (break-inside: avoid) */}
+                        <div className="signature-block legal-doc-closing-block">
+                          <p className="legal-doc-closing-text">
+                            Demikian surat perjanjian kerja ini dibuat secara sadar, tanpa paksaan dari pihak manapun, dalam rangkap 2 (dua) bermeterai cukup yang masing-masing memiliki kekuatan hukum yang sama.
+                          </p>
+
+                          <div className="legal-doc-date-line">
+                            Jakarta, <b>{hrdStartDate}</b>
+                          </div>
+
+                          <div className="signature-grid legal-doc-signatures contract-signatures">
+                            <div className="signature-col legal-doc-sig-col">
+                              <p><b>PIHAK PERTAMA</b></p>
+                              <p className="signature-party-sub">{hrdCompany}</p>
+                              <div className="signature-stage sig-visual-area">
+                                {showCompanyStamp && (
+                                  <div className="corporate-stamp-seal" aria-label="Stempel Resmi Perusahaan">
+                                    <strong>{hrdCompany}</strong>
+                                    <span>OFFICIAL HRD SEAL</span>
+                                  </div>
+                                )}
+                                {hrdRepSig ? (
+                                  <img
+                                    src={hrdRepSig}
+                                    alt={`Tanda Tangan ${hrdRepName}`}
+                                    className="sig-rendered-img"
+                                  />
+                                ) : (
+                                  <span className="sig-placeholder-line">( Tanda Tangan &amp; Stempel )</span>
+                                )}
+                              </div>
+                              <p className="legal-doc-sig-name">{hrdRepName}</p>
+                              <p><small>{hrdRepRole}</small></p>
+                            </div>
+
+                            <div className="signature-col legal-doc-sig-col">
+                              <p><b>PIHAK KEDUA</b></p>
+                              <p className="signature-party-sub">Pekerja / Karyawan</p>
+                              <div className="signature-stage sig-visual-area">
+                                {showEmeterai && (
+                                  <div className="emeterai-seal-box" aria-label="E-Meterai Rp10.000">
+                                    <span className="emeterai-top">E-METERAI RI</span>
+                                    <strong className="emeterai-nominal">Rp10.000</strong>
+                                    <span className="emeterai-serial">EMX-92841029</span>
+                                  </div>
+                                )}
+                                {hrdEmpSig ? (
+                                  <img
+                                    src={hrdEmpSig}
+                                    alt={`Tanda Tangan ${hrdEmpName}`}
+                                    className={`sig-rendered-img ${showEmeterai ? "with-emeterai" : ""}`}
+                                  />
+                                ) : (
+                                  <span className={`sig-placeholder-line ${showEmeterai ? "with-emeterai" : ""}`}>
+                                    ( Tanda Tangan )
+                                  </span>
+                                )}
+                              </div>
+                              <p className="legal-doc-sig-name">{hrdEmpName}</p>
+                              <p><small>{hrdEmpRole}</small></p>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
           {page === "analysis" && (
@@ -3390,16 +4645,16 @@ export default function App() {
                 <div className="settings-divider" />
                 <div className="settings-plan">
                   <div>
-                    <b>{t.settings_plan_label} {plan}</b>
+                    <b>{t.settings_plan_label} — {userPlan === "pro" ? t.plan_badge_pro : t.plan_badge_free}</b>
                     <p>
-                      {plan === "Free"
+                      {userPlan === "free"
                         ? t.settings_plan_free_desc
                         : t.settings_plan_plus_desc}
                     </p>
                   </div>
                   <Button
                     variant="secondary"
-                    onClick={() => navigate("pricing")}
+                    onClick={() => setPlanModal("HRD Pro")}
                   >
                     {t.nav_explore_plans}
                     <Icon name="arrow" size={15} />
@@ -3451,21 +4706,21 @@ export default function App() {
                   {
                     name: "Plus",
                     price: "9",
-                    description: lang === "id" ? "Untuk perjanjian penting yang menentukan langkah karir Anda." : "For the agreements that shape your life.",
+                    description: lang === "id" ? "Untuk HRD, Bisnis & Profesional — Termasuk Generator Surat Kontrak Kerja Otomatis." : "For HRD, Business & Professionals — Includes Automated Employment Contract Generator.",
                     features: lang === "id" ? [
-                      "20 analisis dokumen / bulan",
-                      "Deteksi risiko mendalam",
-                      "Tanya Kontrak Anda (AI Chat)",
-                      "Perbandingan 2 versi kontrak",
-                      "Semua fitur di paket Free",
+                      "✨ Generator Surat Kontrak Kerja HRD Otomatis",
+                      "🛡️ Smart Legal Guardrails (Pasal 58 & 77 UU 13/2003)",
+                      "🖨️ Live Preview & Cetak PDF Kontrak Resmi",
+                      "20 analisis dokumen / bulan & AI Legal Chat",
+                      "Perbandingan 2 versi kontrak berdampingan",
                     ] : [
-                      "20 contract analyses / month",
-                      "Detailed risk detection",
-                      "Ask Your Contract",
-                      "Contract comparison",
-                      "Everything in Free",
+                      "✨ Automated HRD Smart Contract Generator",
+                      "🛡️ Smart Legal Guardrails (Art. 58 & 77 Law 13/2003)",
+                      "🖨️ Live Preview & Official PDF Contract Print",
+                      "20 contract analyses / month & AI Legal Chat",
+                      "Side-by-side 2-contract comparison",
                     ],
-                    cta: lang === "id" ? "Dapatkan Lebih Banyak Kejelasan" : "Get more clarity",
+                    cta: lang === "id" ? "Aktifkan Paket HRD Pro" : "Activate HRD Pro Plan",
                   },
                   {
                     name: "Business",
@@ -4128,7 +5383,7 @@ export default function App() {
           }}
         >
           <div
-            className="modal plan-modal"
+            className="modal plan-modal plan-comparison-modal"
             ref={modalRef}
             role="dialog"
             aria-modal="true"
@@ -4148,36 +5403,82 @@ export default function App() {
                 <Icon name="close" />
               </button>
             </div>
-            <h2 id="plan-title">
-              {lang === "id"
-                ? `Paket Cek Kontrak ${planModal}. Lebih banyak kejelasan.`
-                : `A little more ${planModal === "Free" ? "simplicity" : "clarity"}.`}
+            <span className="eyebrow" style={{ marginBottom: 4 }}>
+              <span className="blue-dot" />
+              {t.plan_modal_eyebrow}
+            </span>
+            <h2 id="plan-title" style={{ margin: "4px 0 6px" }}>
+              {t.plan_modal_title}
             </h2>
-            <p>
-              {lang === "id"
-                ? `Anda memilih paket Cek Kontrak ${planModal}. Ini adalah prototipe demo—tidak ada informasi pembayaran yang dibutuhkan.`
-                : `You’ve selected Cek Kontrak ${planModal}. This is a demo—no payment details are needed, and you won’t be charged.`}
+            <p style={{ margin: "0 0 12px", fontSize: 12.5 }}>
+              {t.plan_modal_sub}
             </p>
-            <div className="plan-demo-card">
-              <Icon name="shield" size={20} />
-              {lang === "id" ? "Pilihan paket disimpan ke profil akun Anda." : "Plan selection is saved for this session only."}
+
+            <div className="plan-compare-grid">
+              {/* FREE PLAN CARD */}
+              <div className="plan-compare-card">
+                <div>
+                  <h3>{t.plan_modal_free_title}</h3>
+                  <div className="plan-compare-price">
+                    {t.plan_modal_free_price} <span>{lang === "id" ? "/ selamanya" : "/ forever"}</span>
+                  </div>
+                  <p style={{ fontSize: 11.5, color: "#64748b", margin: 0 }}>
+                    {t.plan_modal_free_sub}
+                  </p>
+                  <ul className="plan-compare-list">
+                    <li><Icon name="check" size={15} /><span>{t.plan_modal_free_f1}</span></li>
+                    <li><Icon name="check" size={15} /><span>{t.plan_modal_free_f2}</span></li>
+                    <li><Icon name="check" size={15} /><span>{t.plan_modal_free_f3}</span></li>
+                    <li><Icon name="check" size={15} /><span>{t.plan_modal_free_f4}</span></li>
+                  </ul>
+                </div>
+                <Button
+                  variant="secondary"
+                  className="full-width"
+                  onClick={switchToFreePlan}
+                >
+                  {userPlan === "free" ? t.pricing_current : t.plan_modal_use_free_btn}
+                </Button>
+              </div>
+
+              {/* PRO PLAN CARD */}
+              <div className="plan-compare-card pro">
+                <div>
+                  <span className="plan-pro-pill">
+                    <Icon name="spark" size={12} />
+                    {t.plan_modal_pro_badge}
+                  </span>
+                  <h3>{t.plan_modal_pro_title}</h3>
+                  <div className="plan-compare-price">
+                    {t.plan_modal_pro_price} <span>{lang === "id" ? "/ bulan (Simulasi Gratis)" : "/ month (Free Simulation)"}</span>
+                  </div>
+                  <p style={{ fontSize: 11.5, color: "#1d4ed8", fontWeight: 600, margin: 0 }}>
+                    {t.plan_modal_pro_sub}
+                  </p>
+                  <ul className="plan-compare-list">
+                    <li><Icon name="check" size={15} /><span><b>{t.plan_modal_pro_f1}</b></span></li>
+                    <li><Icon name="check" size={15} /><span>{t.plan_modal_pro_f2}</span></li>
+                    <li><Icon name="check" size={15} /><span>{t.plan_modal_pro_f3}</span></li>
+                    <li><Icon name="check" size={15} /><span>{t.plan_modal_pro_f4}</span></li>
+                  </ul>
+                </div>
+                <Button
+                  icon="spark"
+                  className="full-width"
+                  onClick={() => activateProPlan(true)}
+                >
+                  {userPlan === "pro" ? t.plan_modal_active_pro_btn : t.plan_modal_activate_btn}
+                  <Icon name="arrow" size={16} />
+                </Button>
+              </div>
             </div>
-            <Button
-              className="full-width"
-              onClick={() => {
-                setPlan(planModal)
-                setPlanModal(null)
-                setToast(
-                  lang === "id"
-                    ? `Selamat datang di Cek Kontrak ${planModal}. Paket demo aktif.`
-                    : `Welcome to Cek Kontrak ${planModal}. Your demo plan is selected.`
-                )
-                navigate("dashboard")
-              }}
-            >
-              {lang === "id" ? `Lanjutkan dengan ${planModal}` : `Continue with ${planModal}`}
-              <Icon name="arrow" size={17} />
-            </Button>
+
+            <div className="plan-demo-card" style={{ marginBottom: 0 }}>
+              <Icon name="shield" size={18} />
+              {lang === "id"
+                ? "Mode Prototipe Pendidikan — Pengaktifan Paket HRD Pro tidak mengenakan biaya pembayaran."
+                : "Educational Prototype Mode — Activating HRD Pro Plan does not require any payment."}
+            </div>
           </div>
         </div>
       )}

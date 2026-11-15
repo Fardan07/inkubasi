@@ -12,6 +12,7 @@ import {
   simulateAiAnalysis,
   buildContractFromAnalysis,
   chatWithAnalyzedContract,
+  generateHrdContract,
 } from './contractAnalyzer.js';
 
 dotenv.config();
@@ -967,6 +968,42 @@ app.get('/api/contracts/compare', (req, res) => {
     success: true,
     data: contractComparisonData,
   });
+});
+
+// HRD Smart Contract Generator API (Subscription Pro Feature)
+app.post('/api/contracts/generate', async (req, res) => {
+  try {
+    const generated = generateHrdContract(req.body || {});
+    let savedContract = generated.contractDraft;
+
+    if (req.body && req.body.saveToWorkspace) {
+      const persisted = await persistContractToDb(generated.contractDraft, req);
+      savedContract = persisted || generated.contractDraft;
+      contracts.unshift(savedContract);
+      userProfile.analyzedCount += 1;
+    }
+
+    res.status(200).json({
+      success: true,
+      message:
+        generated.legalWarnings.length > 0
+          ? generated.legalWarnings[0]
+          : 'Draf kontrak kerja HRD berhasil disusun sesuai standar regulasi Ketenagakerjaan Indonesia.',
+      data: {
+        ...generated,
+        contract: savedContract,
+        riskScore: savedContract.riskScore,
+        status: savedContract.status,
+        statusId: savedContract.statusId,
+      },
+    });
+  } catch (err) {
+    console.error('HRD contract generator error:', err);
+    res.status(400).json({
+      success: false,
+      message: err.message || 'Gagal menyusun draf kontrak HRD.',
+    });
+  }
 });
 
 // Single Contract Detail
