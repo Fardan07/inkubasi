@@ -578,6 +578,12 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
     const penaltyClause = data.data.clauses.find((c) => /10\.000\.000|denda|pelatihan/i.test(c.text + ' ' + c.meaning));
     assert(Boolean(penaltyClause), 'Pasal 4 denda Rp10.000.000 is detected in clauses');
     assert(penaltyClause && (penaltyClause.status === 'Needs Attention' || penaltyClause.statusId === 'Perlu Perhatian' || penaltyClause.risiko === 'tinggi'), 'Pasal 4 clause is flagged as High Risk');
+    assert(
+      penaltyClause &&
+        penaltyClause.text.includes('Rp10.000.000') &&
+        !penaltyClause.text.trim().startsWith('000 untuk membayar'),
+      'Penalty clause quote preserves full "Rp10.000.000" sentence without mid-number truncation'
+    );
   } catch (err) {
     assert(false, `Kevin Birowo contract analysis failed: ${err.message}`);
   }
@@ -670,7 +676,7 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
       assert(false, `Chat Q4 failed: ${err.message}`);
     }
 
-    // Q5: Identitas Pihak & Jabatan
+    // Q5: Identitas Pihak & Jabatan (Termasuk Verifikasi Urutan Pihak Pertama = Nana Pertiwi & Pihak Kedua = Kevin Birowo)
     try {
       const res = await fetch(`${BASE_URL}/api/contracts/${kevinContractId}/chat`, {
         method: 'POST',
@@ -679,17 +685,137 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          question: 'Siapa para pihak dalam kontrak ini dan apa jabatan saya?',
+          question: 'siapa pihak pertama dan pihak kedua dalam kontrak ini?',
           lang: 'id',
         }),
       });
       const data = await res.json();
       assert(res.status === 200, 'Chat Q5 (Parties & Role) returns 200');
-      assert(data.data.text.includes('Nana Pertiwi') || data.data.text.includes('Bintang Maju'), 'Chat Q5 mentions Nana Pertiwi / PT. Bintang Maju Bersama');
-      assert(data.data.text.includes('Kevin Birowo'), 'Chat Q5 mentions Kevin Birowo');
+      assert(data.data.text.includes('Pihak Pertama: Nana Pertiwi'), 'Chat Q5 accurately identifies Pihak Pertama as Nana Pertiwi');
+      assert(data.data.text.includes('Pihak Kedua: Kevin Birowo'), 'Chat Q5 accurately identifies Pihak Kedua as Kevin Birowo');
+      assert(!data.data.text.includes('Kevin Birowo Alamat'), 'Chat Q5 cleans "Alamat" suffix from party name');
       assert(data.data.text.includes('Supply Chain Manager'), 'Chat Q5 mentions Supply Chain Manager');
+      assert(data.data.source === 0, 'Chat Q5 (contract party query) includes valid clause citation source (0)');
     } catch (err) {
       assert(false, `Chat Q5 failed: ${err.message}`);
+    }
+
+    // Q6: Greeting ("halo") Guardrail — Must return polite greeting, source === null, and NOT dump Skor Risiko
+    try {
+      const res = await fetch(`${BASE_URL}/api/contracts/${kevinContractId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          question: 'halo',
+          lang: 'id',
+        }),
+      });
+      const data = await res.json();
+      assert(res.status === 200, 'Chat Q6 ("halo" greeting) returns 200');
+      assert(data.data.text.startsWith('Halo!'), 'Chat Q6 ("halo") starts with "Halo!" greeting');
+      assert(!data.data.text.includes('Skor Risiko:'), 'Chat Q6 ("halo") does NOT dump "Skor Risiko:" summary');
+      assert(data.data.source === null, 'Chat Q6 ("halo") returns source === null so citation badge is hidden');
+    } catch (err) {
+      assert(false, `Chat Q6 ("halo") failed: ${err.message}`);
+    }
+
+    // Q7: Off-Topic Question ("bagaimana cara membuat kue bolu?") Guardrail
+    try {
+      const res = await fetch(`${BASE_URL}/api/contracts/${kevinContractId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          question: 'bagaimana cara membuat kue bolu?',
+          lang: 'id',
+        }),
+      });
+      const data = await res.json();
+      assert(res.status === 200, 'Chat Q7 (off-topic question) returns 200');
+      assert(
+        data.data.text.includes('Maaf, saya tidak paham maksud Anda'),
+        'Chat Q7 (off-topic) returns polite out-of-scope guardrail message'
+      );
+      assert(!data.data.text.includes('Skor Risiko:'), 'Chat Q7 (off-topic) does NOT dump "Skor Risiko:" summary');
+      assert(data.data.source === null, 'Chat Q7 (off-topic) returns source === null');
+    } catch (err) {
+      assert(false, `Chat Q7 (off-topic) failed: ${err.message}`);
+    }
+
+    // Q8: Platform Feature Question & Explicit Summary Request
+    try {
+      const featRes = await fetch(`${BASE_URL}/api/contracts/${kevinContractId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          question: 'apa saja fitur di website cek kontrak ini?',
+          lang: 'id',
+        }),
+      });
+      const featData = await featRes.json();
+      assert(featRes.status === 200, 'Chat Q8a (platform feature question) returns 200');
+      assert(featData.data.text.includes('4 fitur utama'), 'Chat Q8a explains the 4 core platform features');
+      assert(featData.data.source === null, 'Chat Q8a (platform features) returns source === null');
+
+      const sumRes = await fetch(`${BASE_URL}/api/contracts/${kevinContractId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          question: 'berikan ringkasan dan skor risiko kontrak ini',
+          lang: 'id',
+        }),
+      });
+      const sumData = await sumRes.json();
+      assert(sumRes.status === 200, 'Chat Q8b (explicit summary/risk request) returns 200');
+      assert(sumData.data.text.includes('Skor Risiko:'), 'Chat Q8b returns Skor Risiko summary when explicitly requested');
+    } catch (err) {
+      assert(false, `Chat Q8 failed: ${err.message}`);
+    }
+
+    // Q9: Strict Context-Bound Guardrail ("siapa jokowi?", "siapa brando?", "apa itu ai?", "1 + 1 = berapa?")
+    try {
+      const outOfScopePrompts = [
+        'siapa jokowi?',
+        'siapa brando?',
+        'apa itu ai?',
+        '1 + 1 = berapa?',
+      ];
+      for (const promptText of outOfScopePrompts) {
+        const oosRes = await fetch(`${BASE_URL}/api/contracts/${kevinContractId}/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            question: promptText,
+            lang: 'id',
+          }),
+        });
+        const oosData = await oosRes.json();
+        assert(oosRes.status === 200, `Chat Q9 ("${promptText}") returns 200`);
+        assert(
+          oosData.data.text.includes('Maaf, saya tidak paham maksud Anda'),
+          `Chat Q9 ("${promptText}") is rejected with out-of-scope message`
+        );
+        assert(
+          oosData.data.source === null,
+          `Chat Q9 ("${promptText}") returns source === null (hides citation box)`
+        );
+      }
+    } catch (err) {
+      assert(false, `Chat Q9 strict guardrail tests failed: ${err.message}`);
     }
   }
 

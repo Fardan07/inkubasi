@@ -812,7 +812,7 @@ export default function App() {
   const [messages, setMessages] = useState<{
     role: string
     text: string
-    source?: number
+    source?: number | null
   }[]>([])
   const [compareFiles, setCompareFiles] = useState<string[]>(["", ""])
   const [compared, setCompared] = useState(false)
@@ -1416,16 +1416,16 @@ export default function App() {
       setUploadMode("paste")
       setUploadError(
         lang === "id"
-          ? "📄 Dokumen Word (.docx) terdeteksi. Silakan salin isi pasal kontrak Anda ke kolom di bawah ini untuk analisis AI langsung."
-          : "📄 Word document (.docx) detected. Please copy your contract clauses into the text box below for direct AI analysis."
+          ? "Dokumen Word (.docx) terdeteksi. Silakan salin isi pasal kontrak Anda ke kolom di bawah ini untuk analisis AI langsung."
+          : "Word document (.docx) detected. Please copy your contract clauses into the text box below for direct AI analysis."
       )
     } else if (/\.(jpe?g|png)$/i.test(file.name)) {
       setExtractingPdf(false)
       setUploadMode("paste")
       setUploadError(
         lang === "id"
-          ? "📷 Dokumen foto/scan belum mendukung ekstraksi teks otomatis. Silakan gunakan PDF berbasis teks atau salin isi kontrak ke tab ini."
-          : "📷 Image/photo scan does not support auto-extraction. Please use a text-based PDF or paste contract text into this tab."
+          ? "Dokumen foto/scan belum mendukung ekstraksi teks otomatis. Silakan gunakan PDF berbasis teks atau salin isi kontrak ke tab ini."
+          : "Image/photo scan does not support auto-extraction. Please use a text-based PDF or paste contract text into this tab."
       )
     } else {
       setExtractingPdf(false)
@@ -1528,9 +1528,13 @@ export default function App() {
     setQuestion("")
 
     try {
+      const activeToken = localStorage.getItem("clariq_token") || token
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+        },
         body: JSON.stringify({
           question: text,
           contractId: selected?.id || 1,
@@ -1545,7 +1549,7 @@ export default function App() {
             {
               role: "assistant",
               text: json.data.text,
-              source: json.data.source,
+              source: json.data.source ?? null,
             },
           ])
           return
@@ -2082,7 +2086,10 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
               <span>
                 <b>{t.nav_personal_workspace}</b>
                 {userPlan === "pro" ? (
-                  <small className="workspace-plan-pro">{t.plan_badge_pro}</small>
+                  <small className="workspace-plan-pro">
+                    <Icon name="spark" size={10} />
+                    {t.plan_badge_pro}
+                  </small>
                 ) : (
                   <small className="workspace-plan-free">{t.plan_badge_free}</small>
                 )}
@@ -2113,16 +2120,34 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
               ))}
             </nav>
             <div className="sidebar-bottom">
-              <div className="upgrade-card">
+              <div className={`upgrade-card ${userPlan === "pro" ? "pro-active" : ""}`}>
                 <span className="upgrade-icon">
                   <Icon name="spark" size={19} />
                 </span>
-                <h3>{t.nav_upgrade_title}</h3>
+                <h3>
+                  {userPlan === "pro"
+                    ? lang === "id"
+                      ? "Paket HRD Pro Aktif"
+                      : "HRD Pro Plan Active"
+                    : t.nav_upgrade_title}
+                </h3>
                 <p>
-                  {t.nav_upgrade_desc}
+                  {userPlan === "pro"
+                    ? lang === "id"
+                      ? "Akses penuh Generator Kontrak HRD & Analisis AI tanpa batas."
+                      : "Full access to HRD Contract Builder & unlimited AI analysis."
+                    : t.nav_upgrade_desc}
                 </p>
-                <button onClick={() => setPlanModal("HRD Pro")}>
-                  {t.nav_explore_plans}
+                <button
+                  onClick={() =>
+                    userPlan === "pro" ? navigate("builder") : setPlanModal("HRD Pro")
+                  }
+                >
+                  {userPlan === "pro"
+                    ? lang === "id"
+                      ? "Buat Kontrak HRD"
+                      : "Open HRD Builder"
+                    : t.nav_explore_plans}
                   <Icon name="arrow" size={15} />
                 </button>
               </div>
@@ -2981,16 +3006,19 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
 
                       {hrdType === "PKWT" && (
                         <div className="hrd-guardrail-box warning" role="status">
+                          <Icon name="shield" size={15} />
                           <span>{t.builder_guardrail_pkwt}</span>
                         </div>
                       )}
                       {hrdType === "PKWTT" && (
                         <div className="hrd-guardrail-box safe" role="status">
+                          <Icon name="check" size={15} />
                           <span>{t.builder_guardrail_pkwtt}</span>
                         </div>
                       )}
                       {hrdType === "FREELANCE" && (
                         <div className="hrd-guardrail-box safe" role="status">
+                          <Icon name="shield" size={15} />
                           <span>{t.builder_guardrail_freelance}</span>
                         </div>
                       )}
@@ -3117,6 +3145,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                               className="hrd-sig-mini-btn"
                               onClick={() => sigFileP1Ref.current?.click()}
                             >
+                              <Icon name="upload" size={13} />
                               {t.builder_sig_upload_btn}
                             </button>
                             <button
@@ -3124,6 +3153,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                               className="hrd-sig-mini-btn"
                               onClick={() => setActiveSigPad(activeSigPad === "p1" ? null : "p1")}
                             >
+                              <Icon name="file" size={13} />
                               {t.builder_sig_draw_btn}
                             </button>
                             <button
@@ -3134,6 +3164,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                                 setActiveSigPad(null)
                               }}
                             >
+                              <Icon name="spark" size={13} />
                               {t.builder_sig_auto_btn}
                             </button>
                             {hrdRepSig && (
@@ -3142,6 +3173,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                                 className="hrd-sig-mini-btn danger"
                                 onClick={() => setHrdRepSig("")}
                               >
+                                <Icon name="trash" size={13} />
                                 {t.builder_sig_clear_btn}
                               </button>
                             )}
@@ -3171,7 +3203,8 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                                   className="hrd-sig-mini-btn"
                                   onClick={() => applySigPadCanvas("p1")}
                                 >
-                                  ✅ {t.builder_sig_pad_apply}
+                                  <Icon name="check" size={13} />
+                                  {t.builder_sig_pad_apply}
                                 </button>
                                 <button
                                   type="button"
@@ -3187,8 +3220,9 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                           {hrdRepSig && (
                             <div className="hrd-sig-preview-thumb">
                               <img src={hrdRepSig} alt="Preview TTD Pihak Pertama" />
-                              <span style={{ fontSize: 10.5, color: "#16a34a", fontWeight: 600 }}>
-                                ✓ Aktif di Dokumen
+                              <span style={{ fontSize: 10.5, color: "#16a34a", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <Icon name="check" size={13} />
+                                {lang === "id" ? "Aktif di Dokumen" : "Active on Document"}
                               </span>
                             </div>
                           )}
@@ -3215,6 +3249,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                               className="hrd-sig-mini-btn"
                               onClick={() => sigFileP2Ref.current?.click()}
                             >
+                              <Icon name="upload" size={13} />
                               {t.builder_sig_upload_btn}
                             </button>
                             <button
@@ -3222,6 +3257,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                               className="hrd-sig-mini-btn"
                               onClick={() => setActiveSigPad(activeSigPad === "p2" ? null : "p2")}
                             >
+                              <Icon name="file" size={13} />
                               {t.builder_sig_draw_btn}
                             </button>
                             <button
@@ -3232,6 +3268,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                                 setActiveSigPad(null)
                               }}
                             >
+                              <Icon name="spark" size={13} />
                               {t.builder_sig_auto_btn}
                             </button>
                             {hrdEmpSig && (
@@ -3240,6 +3277,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                                 className="hrd-sig-mini-btn danger"
                                 onClick={() => setHrdEmpSig("")}
                               >
+                                <Icon name="trash" size={13} />
                                 {t.builder_sig_clear_btn}
                               </button>
                             )}
@@ -3269,7 +3307,8 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                                   className="hrd-sig-mini-btn"
                                   onClick={() => applySigPadCanvas("p2")}
                                 >
-                                  ✅ {t.builder_sig_pad_apply}
+                                  <Icon name="check" size={13} />
+                                  {t.builder_sig_pad_apply}
                                 </button>
                                 <button
                                   type="button"
@@ -3285,8 +3324,9 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                           {hrdEmpSig && (
                             <div className="hrd-sig-preview-thumb">
                               <img src={hrdEmpSig} alt="Preview TTD Pihak Kedua" />
-                              <span style={{ fontSize: 10.5, color: "#16a34a", fontWeight: 600 }}>
-                                ✓ Aktif di Dokumen
+                              <span style={{ fontSize: 10.5, color: "#16a34a", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <Icon name="check" size={13} />
+                                {lang === "id" ? "Aktif di Dokumen" : "Active on Document"}
                               </span>
                             </div>
                           )}
@@ -3616,7 +3656,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 {t.analysis_back}
               </button>
               <div className="page-heading analysis-heading">
-                <div>
+                <div className="analysis-header-meta">
                   <h1>{getContractName(selected, lang)}</h1>
                   <p>{selected.company}</p>
                   <div className="document-meta">
@@ -3631,7 +3671,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                     <Badge status={lang === "id" ? "Analisis selesai" : "Analysis complete"} />
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                <div className="analysis-header-actions">
                   <Button
                     onClick={() => {
                       setMessages([])
@@ -3661,8 +3701,10 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
               {(Boolean(selected.meta?.disproportionatePenalty) || Boolean(selected.meta?.penalty && selected.meta?.salaryNum && (selected.meta.penaltyNum ?? 0) >= selected.meta.salaryNum)) && (
                 <div className="red-flag-alert-box">
                   <div className="red-flag-header">
-                    <Icon name="warning" size={22} />
-                    <h3>{t.red_flag_title}</h3>
+                    <span className="red-flag-icon-box">
+                      <Icon name="warning" size={20} />
+                    </span>
+                    <h3>{t.red_flag_title.replace(/^⚠️\s*/, "")}</h3>
                   </div>
                   <div className="red-flag-body">
                     <p>
@@ -3953,7 +3995,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                             )}
                           </span>
                           <p>{m.text}</p>
-                          {m.source !== undefined && (
+                          {m.source !== null && m.source !== undefined && m.source >= 0 && (
                             <div className="chat-citation">
                               <small>
                                 {t.chat_citation_based}{" "}
@@ -3981,18 +4023,20 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 </div>
                 <div className="quick-chips-container" role="group" aria-label="Quick questions">
                   {[
-                    { text: lang === "id" ? "Berapa gaji & kapan dibayar?" : "What is the salary & payment schedule?", label: t.chip_salary },
-                    { text: lang === "id" ? "Apakah ada denda jika resign?" : "Is there a resignation penalty?", label: t.chip_penalty },
-                    { text: lang === "id" ? "Apakah ada masa uji coba?" : "Is there a probation period?", label: t.chip_probation },
-                    { text: lang === "id" ? "Bagaimana aturan jam kerjanya?" : "What are the working hours?", label: t.chip_hours },
+                    { text: lang === "id" ? "Berapa gaji & kapan dibayar?" : "What is the salary & payment schedule?", label: t.chip_salary, icon: "chat" as IconName },
+                    { text: lang === "id" ? "Apakah ada denda jika resign?" : "Is there a resignation penalty?", label: t.chip_penalty, icon: "warning" as IconName },
+                    { text: lang === "id" ? "Apakah ada masa uji coba?" : "Is there a probation period?", label: t.chip_probation, icon: "shield" as IconName },
+                    { text: lang === "id" ? "Bagaimana aturan jam kerjanya?" : "What are the working hours?", label: t.chip_hours, icon: "clock" as IconName },
                   ].map((chip) => (
                     <button
                       key={chip.text}
                       type="button"
                       className="quick-chip-btn"
                       onClick={() => ask(chip.text)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
                     >
-                      {chip.label}
+                      <Icon name={chip.icon} size={13} />
+                      <span>{chip.label}</span>
                     </button>
                   ))}
                 </div>
@@ -4708,15 +4752,15 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                     price: "9",
                     description: lang === "id" ? "Untuk HRD, Bisnis & Profesional — Termasuk Generator Surat Kontrak Kerja Otomatis." : "For HRD, Business & Professionals — Includes Automated Employment Contract Generator.",
                     features: lang === "id" ? [
-                      "✨ Generator Surat Kontrak Kerja HRD Otomatis",
-                      "🛡️ Smart Legal Guardrails (Pasal 58 & 77 UU 13/2003)",
-                      "🖨️ Live Preview & Cetak PDF Kontrak Resmi",
+                      "Generator Surat Kontrak Kerja HRD Otomatis",
+                      "Smart Legal Guardrails (Pasal 58 & 77 UU 13/2003)",
+                      "Live Preview & Cetak PDF Kontrak Resmi",
                       "20 analisis dokumen / bulan & AI Legal Chat",
                       "Perbandingan 2 versi kontrak berdampingan",
                     ] : [
-                      "✨ Automated HRD Smart Contract Generator",
-                      "🛡️ Smart Legal Guardrails (Art. 58 & 77 Law 13/2003)",
-                      "🖨️ Live Preview & Official PDF Contract Print",
+                      "Automated HRD Smart Contract Generator",
+                      "Smart Legal Guardrails (Art. 58 & 77 Law 13/2003)",
+                      "Live Preview & Official PDF Contract Print",
                       "20 contract analyses / month & AI Legal Chat",
                       "Side-by-side 2-contract comparison",
                     ],
@@ -5061,18 +5105,20 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
               <button
                 type="button"
                 className={`btn btn-${uploadContractType === "kerja" ? "primary" : "secondary"}`}
-                style={{ flex: "1 1 200px", minWidth: 0, fontSize: "0.82rem", padding: "8px 10px", minHeight: "36px", whiteSpace: "normal", textAlign: "center", lineHeight: "1.3" }}
+                style={{ flex: "1 1 200px", minWidth: 0, fontSize: "0.82rem", padding: "8px 10px", minHeight: "36px", whiteSpace: "normal", textAlign: "center", lineHeight: "1.3", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 onClick={() => setUploadContractType("kerja")}
               >
-                {lang === "id" ? "⚖️ Ketenagakerjaan (UU 13/2003)" : "⚖️ Employment"}
+                <Icon name="shield" size={14} />
+                <span>{lang === "id" ? "Ketenagakerjaan (UU 13/2003)" : "Employment"}</span>
               </button>
               <button
                 type="button"
                 className={`btn btn-${uploadContractType === "sewa" ? "primary" : "secondary"}`}
-                style={{ flex: "1 1 200px", minWidth: 0, fontSize: "0.82rem", padding: "8px 10px", minHeight: "36px", whiteSpace: "normal", textAlign: "center", lineHeight: "1.3" }}
+                style={{ flex: "1 1 200px", minWidth: 0, fontSize: "0.82rem", padding: "8px 10px", minHeight: "36px", whiteSpace: "normal", textAlign: "center", lineHeight: "1.3", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 onClick={() => setUploadContractType("sewa")}
               >
-                {lang === "id" ? "🏠 Sewa Menyewa (KUHPerdata)" : "🏠 Rental Lease"}
+                <Icon name="file" size={14} />
+                <span>{lang === "id" ? "Sewa Menyewa (KUHPerdata)" : "Rental Lease"}</span>
               </button>
             </div>
 

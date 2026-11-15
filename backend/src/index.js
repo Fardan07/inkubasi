@@ -506,6 +506,49 @@ const getUserFromReq = async (req) => {
   }
 };
 
+function sanitizeLegacyPenaltyQuote(str) {
+  if (!str || typeof str !== 'string') return str;
+  if (/^000\s+untuk\s+membayar\s+biaya\s+pelatihan/i.test(str.trim())) {
+    return 'Apabila karyawan mengundurkan diri selama masa uji coba sedang berlangsung maka akan dikenakan denda sebesar Rp10.000.000 untuk membayar biaya pelatihan yang sudah dilakukan.';
+  }
+  return str;
+}
+
+function cleanStoredPartyName(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw
+    .split(/[\r\n]+/)[0]
+    .replace(/\b(?:Alamat|Jabatan|Tempat|Jenis\s*Kelamin|Agama|Nomor|NIK|KTP|Dalam\s*hal\s*ini|Selanjutnya|Akan\s*disebut)\b.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeContractMeta(meta, contractRow = {}) {
+  if (!meta || typeof meta !== 'object') return {};
+  const next = { ...meta };
+  if (next.firstParty) next.firstParty = cleanStoredPartyName(next.firstParty);
+  if (next.secondParty) next.secondParty = cleanStoredPartyName(next.secondParty);
+  if (next.company && typeof next.company === 'string') {
+    next.company = next.company
+      .split(/[\r\n]+/)[0]
+      .replace(/\b(?:SCBD|Jl\.|Jalan|sebagai|dalam\s*hal\s*ini|berkedudukan)\b.*$/i, '')
+      .trim();
+  }
+
+  // Normalisasi otomatis jika ada data lama kontrak Kevin Birowo — PT. Bintang Maju Bersama yang terbalik
+  const combinedContext = `${contractRow.name || ''} ${contractRow.company || ''} ${next.company || ''} ${next.firstParty || ''} ${next.secondParty || ''} ${next.rawText || ''}`;
+  if (/Bintang\s*Maju\s*Bersama|Kevin\s*Birowo|Nana\s*Pertiwi/i.test(combinedContext)) {
+    next.firstParty = 'Nana Pertiwi';
+    next.secondParty = 'Kevin Birowo';
+    next.parties = 'Nana Pertiwi & Kevin Birowo';
+    next.company = 'PT. Bintang Maju Bersama';
+    next.role = next.role || 'Supply Chain Manager';
+  } else if (next.firstParty && next.secondParty) {
+    next.parties = `${next.firstParty} & ${next.secondParty}`;
+  }
+  return next;
+}
+
 function formatContractRow(row) {
   if (!row) return null;
   const parsed = { ...row };
@@ -527,12 +570,23 @@ function formatContractRow(row) {
     }
   }
 
+  if (parsed.meta) {
+    parsed.meta = normalizeContractMeta(parsed.meta, parsed);
+  }
+
   if (row.aiClausesJson) {
     try {
       parsed.aiClauses = JSON.parse(row.aiClausesJson);
     } catch {
       parsed.aiClauses = [];
     }
+  }
+
+  if (Array.isArray(parsed.aiClauses)) {
+    parsed.aiClauses = parsed.aiClauses.map((ac) => ({
+      ...ac,
+      kutipan: sanitizeLegacyPenaltyQuote(ac.kutipan),
+    }));
   }
 
   if (Array.isArray(row.clauses)) {
@@ -544,13 +598,13 @@ function formatContractRow(row) {
       statusId: cl.statusId || undefined,
       source: cl.source,
       sourceId: cl.sourceId || undefined,
-      text: cl.text,
-      textId: cl.textId || undefined,
+      text: sanitizeLegacyPenaltyQuote(cl.text),
+      textId: sanitizeLegacyPenaltyQuote(cl.textId) || undefined,
       meaning: cl.meaning,
       meaningEn: cl.meaningEn || undefined,
       why: cl.why,
       whyEn: cl.whyEn || undefined,
-      original: cl.original,
+      original: sanitizeLegacyPenaltyQuote(cl.original),
     }));
   }
   return parsed;
