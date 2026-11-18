@@ -380,14 +380,16 @@ function getContractType(type?: string, currentLang: Lang = "id"): string {
   if (!type) return ""
   const lower = type.toLowerCase()
   if (currentLang === "id") {
-    if (lower.includes("employ") || lower.includes("kerja") || lower.includes("tenaga")) return "Ketenagakerjaan"
+    if (lower.includes("kerjasama") || lower.includes("partnership") || lower.includes("jasa") || lower.includes("service")) return "Perjanjian Kerjasama / Jasa"
+    if (lower.includes("employ") || lower.includes("tenaga") || /\bkerja\b/.test(lower)) return "Ketenagakerjaan"
     if (lower.includes("freelance") || lower.includes("lepas")) return "Pekerja Lepas"
     if (lower.includes("business") || lower.includes("vendor") || lower.includes("bisnis")) return "Bisnis / Vendor"
     if (lower.includes("rental") || lower.includes("lease") || lower.includes("sewa")) return "Sewa Menyewa"
     if (lower.includes("other") || lower.includes("lain")) return "Lainnya"
     return type
   } else {
-    if (lower.includes("ketenagakerjaan") || lower.includes("tenaga") || lower.includes("employ")) return "Employment"
+    if (lower.includes("kerjasama") || lower.includes("partnership") || lower.includes("jasa") || lower.includes("service")) return "Partnership / Service"
+    if (lower.includes("ketenagakerjaan") || lower.includes("tenaga") || lower.includes("employ") || /\bkerja\b/.test(lower)) return "Employment"
     if (lower.includes("pekerja lepas") || lower.includes("lepas") || lower.includes("freelance")) return "Freelance"
     if (lower.includes("bisnis") || lower.includes("business")) return "Business"
     if (lower.includes("sewa") || lower.includes("rental") || lower.includes("lease")) return "Rental"
@@ -1361,6 +1363,7 @@ export default function App() {
     }
     setUploadFile(file)
     setUploadError("")
+    setUploadText("")
     setExtractingPdf(true)
     setExtractedData(null)
 
@@ -1496,6 +1499,12 @@ export default function App() {
       if (res.ok && json.success && json.data) {
         setContracts((prev) => [json.data, ...prev])
         setSelected(json.data)
+        setMessages([])
+        setClause(null)
+        setOriginal(false)
+        setUploadFile(null)
+        setUploadText("")
+        setExtractedData(null)
         setUploadOpen(false)
         navigate("analysis")
         setToast(
@@ -1599,26 +1608,38 @@ export default function App() {
       { role: "assistant", text: answer, source },
     ])
   }
+  const [checkoutMethod, setCheckoutMethod] = useState<"QRIS" | "BCA_VA" | "MANDIRI_VA">("QRIS")
+  const [promoCode, setPromoCode] = useState("")
+  const [paymentVerifying, setPaymentVerifying] = useState(false)
+
   const activateProPlan = (navigateToBuilder = false) => {
     setUserPlan("pro")
     setPlan("HRD Pro")
     localStorage.setItem("clariq_plan", "pro")
+    setPaymentVerifying(false)
     setPlanModal(null)
     setToast(t.plan_activated_toast)
     const activeToken = localStorage.getItem("clariq_token") || token
     if (activeToken) {
-      fetch("/api/user", {
-        method: "PUT",
+      fetch("/api/subscription/upgrade", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${activeToken}`,
         },
-        body: JSON.stringify({ plan: "HRD Pro" }),
+        body: JSON.stringify({ promoCode, method: checkoutMethod }),
       }).catch(() => {})
     }
     if (navigateToBuilder) {
       navigate("builder")
     }
+  }
+
+  const handleSimulateCheckoutPayment = (navigateToBuilder = true) => {
+    setPaymentVerifying(true)
+    setTimeout(() => {
+      activateProPlan(navigateToBuilder)
+    }, 900)
   }
 
   const switchToFreePlan = () => {
@@ -1629,13 +1650,12 @@ export default function App() {
     setToast(t.plan_switched_free_toast)
     const activeToken = localStorage.getItem("clariq_token") || token
     if (activeToken) {
-      fetch("/api/user", {
-        method: "PUT",
+      fetch("/api/subscription/reset", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${activeToken}`,
         },
-        body: JSON.stringify({ plan: "Free" }),
       }).catch(() => {})
     }
   }
@@ -2081,13 +2101,12 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 <Icon name="close" />
               </button>
             </div>
-            <button className="workspace" onClick={() => setProfile(!profile)}>
-              <span className="workspace-avatar">P</span>
+            <button className={`workspace ${userPlan === "pro" ? "pro-active" : ""}`} onClick={() => setProfile(!profile)}>
+              <span className={`workspace-avatar ${userPlan === "pro" ? "pro" : ""}`}>P</span>
               <span>
                 <b>{t.nav_personal_workspace}</b>
                 {userPlan === "pro" ? (
                   <small className="workspace-plan-pro">
-                    <Icon name="spark" size={10} />
                     {t.plan_badge_pro}
                   </small>
                 ) : (
@@ -2342,7 +2361,6 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                     }
                   }}
                 />
-                <kbd>⌘ K</kbd>
               </div>
               <div className="popover-container" ref={notificationsRef}>
                 <button
@@ -2431,6 +2449,16 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                     <button onClick={() => navigate("pricing")}>
                       <Icon name="spark" size={16} />
                       {t.plans_billing}
+                    </button>
+                    <button
+                      id="btn-reset-free-plan"
+                      onClick={() => {
+                        setProfile(false)
+                        switchToFreePlan()
+                      }}
+                    >
+                      <Icon name="shield" size={16} />
+                      {lang === "id" ? "Reset ke Paket Gratis (Mode Pameran)" : "Reset to Free Plan (Exhibition Mode)"}
                     </button>
                     {token ? (
                       <button onClick={handleLogout}>
@@ -2662,21 +2690,6 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                   )}
                 </section>
               </div>
-              <section className="new-contract-card">
-                <div className="upload-circle">
-                  <Icon name="upload" size={25} />
-                </div>
-                <div>
-                  <h3>{t.new_contract_title}</h3>
-                  <p>
-                    {t.new_contract_desc}
-                  </p>
-                </div>
-                <Button variant="secondary" icon="plus" onClick={openUpload}>
-                  {t.new_contract_btn}
-                </Button>
-                <div className="banner-decoration" />
-              </section>
               <div className="trust-footer">
                 <span>
                   <Icon name="shield" size={15} />
@@ -2817,7 +2830,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                   </div>
 
                   <div className="hrd-paywall-actions">
-                    <Button icon="spark" onClick={() => activateProPlan(false)}>
+                    <Button icon="spark" onClick={() => setPlanModal("HRD Pro")}>
                       {t.builder_paywall_upgrade_btn}
                       <Icon name="arrow" size={16} />
                     </Button>
@@ -3751,37 +3764,106 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                   </p>
                   <span className="source-caption">
                     <Icon name="file" size={13} />
-                    {t.summary_based_on}
+                    {t.summary_based_on} · {activeClauses.length} {t.risk_clauses_count}
                   </span>
                 </div>
               </section>
               <div className="insight-grid">
-                {[
-                  {
-                    icon: "file" as IconName,
-                    label: t.insight_salary_title,
-                    value: selected.meta?.salary || (lang === "id" ? "Rp8.000.000 / bln" : "Rp8,000,000 / mo"),
-                    sub: selected.meta?.paymentSchedule || (lang === "id" ? "Bulanan · Transfer bank" : "Monthly · Bank transfer"),
-                  },
-                  {
-                    icon: "clock" as IconName,
-                    label: t.insight_hours_title,
-                    value: selected.meta?.workingHours || (lang === "id" ? "Senin - Jumat (40 jam/minggu)" : "Mon - Fri (40 hrs/wk)"),
-                    sub: lang === "id" ? "Sesuai Pasal 77 UU 13/2003" : "Complies with Art. 77 Law 13/2003",
-                  },
-                  {
-                    icon: "shield" as IconName,
-                    label: t.insight_probation_title,
-                    value: selected.meta?.probationPeriod || selected.meta?.noticePeriod || (lang === "id" ? "30 hari" : "30 days"),
-                    sub: selected.meta?.noticePeriod ? `${lang === "id" ? "Notice" : "Notice"}: ${selected.meta.noticePeriod}` : (lang === "id" ? "Masa percobaan kerja" : "Probation period"),
-                  },
-                  {
-                    icon: "calendar" as IconName,
-                    label: t.insight_role_title,
-                    value: selected.meta?.role || selected.type || (lang === "id" ? "Karyawan" : "Employee"),
-                    sub: selected.meta?.company || selected.company || (lang === "id" ? "Perusahaan" : "Company"),
-                  },
-                ].map((item, idx) => (
+                {(() => {
+                  const isPartnership =
+                    selected.meta?.detectedCategory === "kerjasama" ||
+                    /kerjasama|partnership|service|jasa/i.test(`${selected.type || ""} ${selected.typeId || ""}`)
+                  const isRental =
+                    selected.meta?.detectedCategory === "sewa" ||
+                    /rental|sewa|lease/i.test(`${selected.type || ""} ${selected.typeId || ""}`)
+                  const isNonEmployment = isPartnership || isRental
+
+                  return [
+                    {
+                      icon: "file" as IconName,
+                      label: isNonEmployment
+                        ? lang === "id"
+                          ? "Nilai Kontrak & Pembayaran"
+                          : "Contract Value & Payment"
+                        : t.insight_salary_title,
+                      value:
+                        selected.meta?.salary ||
+                        (isNonEmployment
+                          ? lang === "id"
+                            ? "Sesuai rincian nilai kontrak"
+                            : "As stated in contract"
+                          : lang === "id"
+                            ? "Rp8.000.000 / bln"
+                            : "Rp8,000,000 / mo"),
+                      sub:
+                        selected.meta?.paymentSchedule ||
+                        (lang === "id" ? "Transfer rekening bank" : "Bank transfer"),
+                    },
+                    {
+                      icon: "clock" as IconName,
+                      label:
+                        isNonEmployment || Boolean(selected.meta?.contractDuration)
+                          ? lang === "id"
+                            ? "Jangka Waktu & Layanan"
+                            : "Contract Term & Scope"
+                          : t.insight_hours_title,
+                      value:
+                        selected.meta?.contractDuration ||
+                        selected.meta?.workingHours ||
+                        (isNonEmployment
+                          ? lang === "id"
+                            ? "Sesuai jangka waktu perjanjian"
+                            : "Per contract duration"
+                          : lang === "id"
+                            ? "Senin - Jumat (40 jam/minggu)"
+                            : "Mon - Fri (40 hrs/wk)"),
+                      sub:
+                        isNonEmployment || Boolean(selected.meta?.contractDuration)
+                          ? selected.meta?.role ||
+                            (lang === "id"
+                              ? "Sesuai Pasal 1338 KUHPerdata"
+                              : "Complies with Art. 1338 Civil Code")
+                          : lang === "id"
+                            ? "Sesuai Pasal 77 UU 13/2003"
+                            : "Complies with Art. 77 Law 13/2003",
+                    },
+                    {
+                      icon: "shield" as IconName,
+                      label: isNonEmployment
+                        ? lang === "id"
+                          ? "Perubahan & Pengakhiran"
+                          : "Amendments & Termination"
+                        : t.insight_probation_title,
+                      value:
+                        selected.meta?.probationPeriod ||
+                        selected.meta?.noticePeriod ||
+                        (lang === "id" ? "Diatur tertulis" : "Written terms"),
+                      sub: selected.meta?.noticePeriod
+                        ? `${lang === "id" ? "Ketentuan" : "Terms"}: ${selected.meta.noticePeriod}`
+                        : isNonEmployment
+                          ? lang === "id"
+                            ? "Ketentuan masa berlaku"
+                            : "Term provisions"
+                          : lang === "id"
+                            ? "Masa percobaan kerja"
+                            : "Probation period",
+                    },
+                    {
+                      icon: "calendar" as IconName,
+                      label: isNonEmployment
+                        ? lang === "id"
+                          ? "Para Pihak & Objek"
+                          : "Parties & Object"
+                        : t.insight_role_title,
+                      value: isNonEmployment
+                        ? selected.meta?.company || selected.company || selected.meta?.role || "-"
+                        : selected.meta?.role || (lang === "id" ? "Karyawan" : "Employee"),
+                      sub: isNonEmployment
+                        ? `${getContractType(selected.typeId || selected.type, lang)}${selected.meta?.role ? ` · ${selected.meta.role}` : ""}`
+                        : selected.meta?.company || selected.company || (lang === "id" ? "Perusahaan" : "Company"),
+                    },
+                  ]
+                })().map((item, idx) => (
                   <div className={`surface insight-card stagger-${idx + 1}`} key={item.label}>
                     <div>
                       <Icon name={item.icon} size={18} />
@@ -3843,7 +3925,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 {activeClauses.map((item, i) => (
                   <button
                     className={`clause-row ${i < 4 ? `stagger-${i + 1}` : ""}`}
-                    key={item.title}
+                    key={`${item.id ?? i}-${item.title}`}
                     onClick={() => openClause(i)}
                   >
                     <span
@@ -3936,7 +4018,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                   </span>
                   <div>
                     <b>{lang === "id" ? (selected.nameId || selected.name) : selected.name}</b>
-                    <span>{lang === "id" ? "Dokumen Perjanjian · 12 klausul" : "Sample agreement · 12 clauses"}</span>
+                    <span>{lang === "id" ? `Dokumen Perjanjian · ${activeClauses.length} ${t.risk_clauses_count}` : `Contract document · ${activeClauses.length} ${t.risk_clauses_count}`}</span>
                   </div>
                   <span className="chat-ready">
                     <span />
@@ -4124,6 +4206,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                       onChange={(e) => {
                         const val = e.target.value
                         setCompareIdA(val)
+                        setCompared(true)
                         const c = contracts.find((item) => String(item.id) === String(val))
                         if (c) {
                           const next = [...compareFiles]
@@ -4150,6 +4233,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                       onChange={(e) => {
                         const val = e.target.value
                         setCompareIdB(val)
+                        setCompared(true)
                         const c = contracts.find((item) => String(item.id) === String(val))
                         if (c) {
                           const next = [...compareFiles]
@@ -4239,43 +4323,39 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                             const metaB = contractB?.meta as Record<string, string> | undefined
                             return [
                               [
-                                lang === "id" ? "Durasi Kontrak" : "Duration",
-                                metaA?.duration || metaA?.expiryDate || (lang === "id" ? "12 bulan" : "12 months"),
-                                metaB?.duration || metaB?.expiryDate || (lang === "id" ? "12 bulan" : "12 months"),
+                                lang === "id" ? "Para Pihak / Instansi" : "Parties / Organization",
+                                metaA?.company || contractA?.company || "-",
+                                metaB?.company || contractB?.company || "-",
                               ],
                               [
-                                lang === "id" ? "Gaji / Kompensasi" : "Payment",
+                                lang === "id" ? "Durasi Kontrak" : "Duration",
+                                metaA?.contractDuration || metaA?.duration || metaA?.expiryDate || (lang === "id" ? "12 bulan" : "12 months"),
+                                metaB?.contractDuration || metaB?.duration || metaB?.expiryDate || (lang === "id" ? "12 bulan" : "12 months"),
+                              ],
+                              [
+                                lang === "id" ? "Gaji / Nilai Kontrak" : "Payment / Contract Value",
                                 metaA?.salary || (lang === "id" ? "Rp12.000.000 / bulan" : "Rp12,000,000 / month"),
                                 metaB?.salary || (lang === "id" ? "Rp14.000.000 / bulan" : "Rp14,000,000 / month"),
                               ],
                               [
-                                lang === "id" ? "Masa Pemberitahuan" : "Notice Period",
+                                lang === "id" ? "Masa Pemberitahuan / Addendum" : "Notice Period / Addendum",
                                 metaA?.noticePeriod || (lang === "id" ? "30 hari" : "30 days"),
                                 metaB?.noticePeriod || (lang === "id" ? "60 hari" : "60 days"),
                               ],
                               [
-                                lang === "id" ? "Perpanjangan" : "Renewal",
-                                metaA?.renewal || (lang === "id" ? "Otomatis · 12 bulan" : "Automatic · 12 months"),
-                                metaB?.renewal || (lang === "id" ? "Otomatis · 12 bulan" : "Automatic · 12 months"),
+                                lang === "id" ? "Masa Uji Coba / Ketentuan" : "Probation / Terms",
+                                metaA?.probationPeriod || (lang === "id" ? "Tidak ada masa uji coba" : "No probation"),
+                                metaB?.probationPeriod || (lang === "id" ? "Tidak ada masa uji coba" : "No probation"),
                               ],
                               [
-                                lang === "id" ? "Pengakhiran Kontrak" : "Termination",
-                                metaA?.noticePeriod
-                                  ? (lang === "id" ? `Pemberitahuan tertulis ${metaA.noticePeriod}` : `${metaA.noticePeriod} written notice`)
-                                  : (lang === "id" ? "Pemberitahuan tertulis 30 hari" : "30 days’ written notice"),
-                                metaB?.noticePeriod
-                                  ? (lang === "id" ? `Pemberitahuan tertulis ${metaB.noticePeriod}` : `${metaB.noticePeriod} written notice`)
-                                  : (lang === "id" ? "Pemberitahuan tertulis 60 hari" : "60 days’ written notice"),
+                                lang === "id" ? "Denda / Penalti" : "Penalty",
+                                metaA?.penalty || metaA?.dendaResign || (lang === "id" ? "Tanpa denda pinalti" : "No early termination penalty"),
+                                metaB?.penalty || metaB?.dendaResign || (lang === "id" ? "Tanpa denda pinalti" : "No early termination penalty"),
                               ],
                               [
-                                lang === "id" ? "Denda Resign Dini" : "Penalty",
-                                metaA?.dendaResign || (lang === "id" ? "1 bulan gaji kotor" : "One month’s gross salary"),
-                                metaB?.dendaResign || (lang === "id" ? "Tanpa denda pinalti" : "No early termination penalty"),
-                              ],
-                              [
-                                lang === "id" ? "Jam Kerja / Tanggung Jawab" : "Schedule / Responsibilities",
-                                metaA?.workingHours || (lang === "id" ? "40 jam/minggu" : "40 hrs/week"),
-                                metaB?.workingHours || (lang === "id" ? "40 jam/minggu" : "40 hrs/week"),
+                                lang === "id" ? "Jam Kerja / Ruang Lingkup" : "Schedule / Scope",
+                                metaA?.workingHours || metaA?.role || (lang === "id" ? "40 jam/minggu" : "40 hrs/week"),
+                                metaB?.workingHours || metaB?.role || (lang === "id" ? "40 jam/minggu" : "40 hrs/week"),
                               ],
                             ].map(([label, a, b]) => (
                               <tr
@@ -4766,25 +4846,6 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                     ],
                     cta: lang === "id" ? "Aktifkan Paket HRD Pro" : "Activate HRD Pro Plan",
                   },
-                  {
-                    name: "Business",
-                    price: "29",
-                    description: lang === "id" ? "Pastikan seluruh tim sepaham dalam setiap kontrak kesepakatan." : "Keep your whole team on the same page.",
-                    features: lang === "id" ? [
-                      "100 analisis dokumen / bulan",
-                      "Ruang kerja kolaborasi tim",
-                      "Hingga 5 anggota tim",
-                      "Dasbor analitik terpusat",
-                      "Manajemen dokumen tingkat lanjut",
-                    ] : [
-                      "100 contract analyses / month",
-                      "Team workspace",
-                      "Up to 5 workspace members",
-                      "Contract dashboard",
-                      "Advanced document management",
-                    ],
-                    cta: lang === "id" ? "Pilih Paket Bisnis" : "Choose Business",
-                  },
                 ].map((item) => (
                   <section
                     className={`surface pricing-card ${
@@ -4804,13 +4865,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                       }`}
                     >
                       <Icon
-                        name={
-                          item.name === "Free"
-                            ? "file"
-                            : item.name === "Plus"
-                              ? "spark"
-                              : "grid"
-                        }
+                        name={item.name === "Free" ? "file" : "spark"}
                         size={23}
                       />
                     </span>
@@ -5501,21 +5556,155 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                   <p style={{ fontSize: 11.5, color: "#1d4ed8", fontWeight: 600, margin: 0 }}>
                     {t.plan_modal_pro_sub}
                   </p>
-                  <ul className="plan-compare-list">
+                   <ul className="plan-compare-list">
                     <li><Icon name="check" size={15} /><span><b>{t.plan_modal_pro_f1}</b></span></li>
                     <li><Icon name="check" size={15} /><span>{t.plan_modal_pro_f2}</span></li>
                     <li><Icon name="check" size={15} /><span>{t.plan_modal_pro_f3}</span></li>
                     <li><Icon name="check" size={15} /><span>{t.plan_modal_pro_f4}</span></li>
                   </ul>
+
+                  {/* QRIS & Virtual Account Exhibition Checkout Box */}
+                  <div
+                    id="qris-checkout-box"
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #bfdbfe",
+                      borderRadius: 10,
+                      padding: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <strong style={{ fontSize: 11.5, color: "var(--color-navy)" }}>
+                        {lang === "id" ? "Metode Pembayaran (QRIS & Virtual Account)" : "Payment Method (QRIS & Virtual Account)"}
+                      </strong>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#1d4ed8", background: "#dbeafe", padding: "2px 7px", borderRadius: 999 }}>
+                        QRIS / VA · 14:59
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                      {(["QRIS", "BCA_VA", "MANDIRI_VA"] as const).map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() => setCheckoutMethod(method)}
+                          style={{
+                            flex: 1,
+                            padding: "6px 8px",
+                            borderRadius: 7,
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            border: checkoutMethod === method ? "1.5px solid #2563eb" : "1px solid #cbd5e1",
+                            background: checkoutMethod === method ? "#eff6ff" : "#f8fafc",
+                            color: checkoutMethod === method ? "#1d4ed8" : "#475569",
+                          }}
+                        >
+                          {method === "QRIS" ? "QRIS Instan" : method === "BCA_VA" ? "BCA VA" : "Mandiri VA"}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                      <div
+                        style={{
+                          width: 54,
+                          height: 54,
+                          borderRadius: 8,
+                          border: "1px solid #cbd5e1",
+                          background: "#f8fafc",
+                          display: "grid",
+                          placeItems: "center",
+                          flexShrink: 0,
+                          fontSize: 9,
+                          fontWeight: 800,
+                          color: "#0f172a",
+                          textAlign: "center",
+                          lineHeight: 1.15,
+                        }}
+                      >
+                        {checkoutMethod === "QRIS" ? "QRIS\nCLARIQ" : "VA\n880192"}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <label
+                          htmlFor="checkout-promo-input"
+                          style={{ display: "block", fontSize: 10.5, fontWeight: 600, color: "#475569", marginBottom: 4 }}
+                        >
+                          {lang === "id" ? "Kode Voucher / Promo Pameran" : "Exhibition Promo Code"}
+                        </label>
+                        <input
+                          id="checkout-promo-input"
+                          type="text"
+                          value={promoCode}
+                          onChange={(e) => setPromoCode(e.target.value)}
+                          placeholder={lang === "id" ? "Ketik GURU atau PAMERAN" : "Type GURU or PAMERAN"}
+                          style={{
+                            width: "100%",
+                            padding: "6px 10px",
+                            borderRadius: 7,
+                            border: "1px solid #cbd5e1",
+                            fontSize: 11.5,
+                            fontWeight: 600,
+                          }}
+                        />
+                      </div>
+                    </div>
+                    {/^(guru|pameran|dosen|demo)$/i.test(promoCode.trim()) && (
+                      <div
+                        id="promo-applied-badge"
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "#15803d",
+                          background: "#f0fdf4",
+                          border: "1px solid #86efac",
+                          borderRadius: 7,
+                          padding: "5px 9px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <Icon name="check" size={14} />
+                        {lang === "id"
+                          ? `Kode "${promoCode.toUpperCase()}" aktif: Diskon 100% (Rp 0)`
+                          : `Code "${promoCode.toUpperCase()}" applied: 100% Off (Rp 0)`}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <Button
-                  icon="spark"
-                  className="full-width"
-                  onClick={() => activateProPlan(true)}
-                >
-                  {userPlan === "pro" ? t.plan_modal_active_pro_btn : t.plan_modal_activate_btn}
-                  <Icon name="arrow" size={16} />
-                </Button>
+                {paymentVerifying ? (
+                  <div
+                    id="payment-verifying-state"
+                    style={{
+                      padding: "11px 16px",
+                      borderRadius: 9,
+                      background: "#eff6ff",
+                      border: "1px solid #93c5fd",
+                      color: "#1d4ed8",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <Icon name="spark" size={16} />
+                    {lang === "id" ? "Memverifikasi Pembayaran QRIS..." : "Verifying QRIS Payment..."}
+                  </div>
+                ) : (
+                  <Button
+                    icon="spark"
+                    className="full-width"
+                    onClick={() => handleSimulateCheckoutPayment(true)}
+                  >
+                    {userPlan === "pro"
+                      ? t.plan_modal_active_pro_btn
+                      : lang === "id"
+                        ? "Simulasikan Pembayaran Berhasil"
+                        : "Simulate Successful Payment"}
+                    <Icon name="arrow" size={16} />
+                  </Button>
+                )}
               </div>
             </div>
 

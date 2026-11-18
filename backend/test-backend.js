@@ -574,7 +574,7 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
     assert(data.data.meta.penalty && data.data.meta.penalty.includes('10.000.000'), 'Extracted meta.penalty contains 10.000.000');
     assert(data.data.meta.disproportionatePenalty === true, 'Disproportionate penalty flag is true (10M > 8M)');
 
-    // Clause verification
+    // Clause verification & Anti-Truncation across all clauses
     const penaltyClause = data.data.clauses.find((c) => /10\.000\.000|denda|pelatihan/i.test(c.text + ' ' + c.meaning));
     assert(Boolean(penaltyClause), 'Pasal 4 denda Rp10.000.000 is detected in clauses');
     assert(penaltyClause && (penaltyClause.status === 'Needs Attention' || penaltyClause.statusId === 'Perlu Perhatian' || penaltyClause.risiko === 'tinggi'), 'Pasal 4 clause is flagged as High Risk');
@@ -584,6 +584,10 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
         !penaltyClause.text.trim().startsWith('000 untuk membayar'),
       'Penalty clause quote preserves full "Rp10.000.000" sentence without mid-number truncation'
     );
+    const anyClauseTruncated = data.data.clauses.some((c) =>
+      /(?<!000\.)000\s+untuk\s+membayar/i.test(`${c.text || ''} ${c.meaning || ''} ${c.why || ''}`)
+    );
+    assert(!anyClauseTruncated, 'Anti-Truncation: Zero clauses contain broken "000 untuk membayar" fragment');
   } catch (err) {
     assert(false, `Kevin Birowo contract analysis failed: ${err.message}`);
   }
@@ -670,6 +674,7 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
       const data = await res.json();
       assert(res.status === 200, 'Chat Q4 (Denda) returns 200');
       assert(data.data.text.includes('10.000.000'), 'Chat Q4 mentions exact fine Rp10.000.000');
+      assert(!/(?<!000\.)000\s+untuk\s+membayar/i.test(data.data.text), 'Chat Q4 reply has no truncated "000 untuk membayar"');
       assert(data.data.text.toLowerCase().includes('melebihi') || data.data.text.toLowerCase().includes('tidak proporsional'), 'Chat Q4 flags that fine exceeds monthly salary');
       assert(data.data.text.includes('PP No. 35/2021') || data.data.text.includes('MK'), 'Chat Q4 cites PP 35/2021 / Putusan MK');
     } catch (err) {
@@ -901,7 +906,7 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
         employeeName: 'Dimas Pratama',
         employeeRole: 'Senior Frontend Engineer',
         durationMonths: 12,
-        probationMonths: 2,
+        probationMonths: 3,
         salary: 15000000,
         paymentDay: 25,
         noticePeriodDays: 30,
@@ -910,7 +915,7 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
     const genPkwtData = await genPkwtRes.json();
     assert(genPkwtRes.status === 200, 'POST /api/contracts/generate for PKWT returns 200');
     assert(genPkwtData.success === true, 'HRD PKWT generation success is true');
-    assert(genPkwtData.data.effectiveProbationMonths === 0, 'PKWT probationMonths > 0 auto-corrected to 0');
+    assert(genPkwtData.data.effectiveProbationMonths === 0, 'PKWT probationMonths: 3 auto-corrected to 0');
     assert(genPkwtData.data.probationGuardrailTriggered === true, 'PKWT probation guardrail triggered is true');
     assert(
       Array.isArray(genPkwtData.data.legalWarnings) &&
@@ -926,7 +931,41 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
       'Generated contractText includes company and employee names'
     );
 
-    // 31b. Generate PKWTT (Karyawan Tetap) with valid 3-month probation
+    // 31b. Save generated HRD PKWT draft to My Contracts (POST /api/contracts) & verify Safe status
+    const saveHrdRes = await fetch(`${BASE_URL}/api/contracts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: genPkwtData.data.title || 'Kontrak Kerja PKWT - Dimas Pratama',
+        fileName: 'Kontrak-PKWT-Dimas-Pratama.pdf',
+        company: 'PT. Nusantara Teknologi Mandiri',
+        contractType: 'kerja',
+        contractText: genPkwtData.data.contractText,
+        useAICheck: true,
+        lang: 'id',
+      }),
+    });
+    const saveHrdData = await saveHrdRes.json();
+    assert(saveHrdRes.status === 201, 'Saving generated HRD contract to POST /api/contracts returns 201');
+    assert(saveHrdData.success === true, 'Saved HRD contract creation success is true');
+    assert(saveHrdData.data.riskScore < 30, `Saved HRD contract has Low Risk score (${saveHrdData.data.riskScore} < 30)`);
+    assert(
+      saveHrdData.data.status === 'Safe' || saveHrdData.data.statusId === 'Aman',
+      'Saved HRD contract status is Safe / Aman'
+    );
+
+    if (saveHrdData.data && saveHrdData.data.id) {
+      const delHrdRes = await fetch(`${BASE_URL}/api/contracts/${saveHrdData.data.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      assert(delHrdRes.status === 200, 'Cleanup saved HRD contract returns 200');
+    }
+
+    // 31c. Generate PKWTT (Karyawan Tetap) with valid 3-month probation
     const genPkwttRes = await fetch(`${BASE_URL}/api/contracts/generate`, {
       method: 'POST',
       headers: {
@@ -948,6 +987,212 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
     assert(genPkwttData.data.riskScore < 30, 'Generated PKWTT contract has Low Risk / Safe score');
   } catch (err) {
     assert(false, `HRD Smart Contract Generator test failed: ${err.message}`);
+  }
+
+  // 32. Sequential Multi-Document Upload & Analysis (Document 1 Kevin Birowo -> Document 2 BKD Kaltim & PT. Powernet Indosolusi)
+  try {
+    // Step 32a: Upload Document 1 (Kevin Birowo Employment Contract)
+    const doc1Res = await fetch(`${BASE_URL}/api/contracts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: 'Surat_Kontrak_Kevin_Birowo',
+        fileName: 'Surat_Kontrak_Kevin_Birowo.pdf',
+        contractType: 'kerja',
+        contractText: kevinContractText,
+        useAICheck: true,
+        lang: 'id',
+      }),
+    });
+    const doc1Json = await doc1Res.json();
+    const doc1 = doc1Json.data;
+    assert(doc1Res.status === 201 && doc1Json.success === true, 'Sequential Doc 1 (Kevin Birowo) upload returns 201');
+    assert(doc1.typeId === 'Ketenagakerjaan', 'Doc 1 detected as Ketenagakerjaan');
+    assert(doc1.meta.firstParty === 'Nana Pertiwi', 'Doc 1 First Party is Nana Pertiwi');
+    assert(doc1.meta.secondParty === 'Kevin Birowo', 'Doc 1 Second Party is Kevin Birowo');
+    assert(doc1.meta.salary.includes('8.000.000'), 'Doc 1 Salary is Rp8.000.000');
+    assert(doc1.meta.penalty.includes('10.000.000') && doc1.riskScore >= 65, 'Doc 1 Penalty is Rp10.000.000 (High Risk)');
+
+    // Step 32b: Immediately Upload Document 2 (BKD Prov. Kalimantan Timur & PT. Powernet Indosolusi)
+    const bkdKaltimText = [
+      'PEMERINTAH PROVINSI KALIMANTAN TIMUR - BADAN KEPEGAWAIAN DAERAH',
+      'SURAT PERJANJIAN KERJASAMA',
+      'Nomor : 800/I.2-45/BKD/2021',
+      'Nomor : SPK.CS-01/BKD/PWR.2021',
+      'Pada hari ini Senin tanggal Empat bulan Januari tahun Dua Ribu Dua Puluh Satu:',
+      'I. Nama : Dra. Nina Dewi, MAP.',
+      'Jabatan : Kuasa Pengguna Anggaran',
+      'Kantor : Jl. M. Yamin No.1 Samarinda',
+      'Dalam hal ini bertindak untuk dan atas nama BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR selanjutnya disebut PIHAK PERTAMA.',
+      'II. Nama : Akbar Marwan',
+      'Jabatan : Account Executive',
+      'Kantor : PT. POWERNET INDOSOLUSI Jalan HR. Rasuna Said Blok X-5 Kav.2-3 Menara Kadin Jakarta 12950',
+      'Dalam hal ini bertindak untuk dan atas nama PT. POWERNET INDOSOLUSI selanjutnya disebut PIHAK KEDUA.',
+      '',
+      'PASAL 1',
+      'LINGKUP PERJANJIAN KERJASAMA',
+      'Pihak Pertama menyerahkan tugas kepada Pihak Kedua untuk mengelola Server Colocation BKD yang ditempatkan pada PT. POWERNET INDOSOLUSI Menara Kadin Jakarta, Lokasi Fisik Gedung TELKOM Karet Tengsin Jakarta Pusat.',
+      '',
+      'PASAL 2',
+      'KEWAJIBAN PIHAK KEDUA',
+      '1. PIHAK KEDUA memfasilitasi serta memelihara Server sebagai Colocation Server Badan Kepegawaian Daerah Prov. Kaltim selama 1 Tahun mulai bulan Januari sampai dengan Desember 2021.',
+      '2. PIHAK KEDUA menyediakan fasilitas jaringan internet untuk collocation Web Server dengan spesifikasi unlimited.',
+      '',
+      'PASAL 3',
+      'KEWAJIBAN PIHAK PERTAMA',
+      '1. PIHAK PERTAMA membayar jasa sewa untuk Colocation Server kepada PIHAK KEDUA sebesar Rp. 2.500.000,- (dua juta lima ratus ribu rupiah) per bulan sudah termasuk pajak, dilakukan per semester Rp. 2.500.000 x 6 bln = Rp. 15.000.000,- melalui transfer:',
+      'BANK : BCA CABANG MARGONDA',
+      'Atas Nama : AKBAR MARWAN',
+      'Nomor Rekening : 869-004-6572 Jakarta Pusat;',
+      '2. Beban biaya diambil dari APBD Provinsi Kalimantan Timur Tahun 2021 kode rekening 4.5.01.09.10.5.2.1.19.17.',
+      '',
+      'PASAL 4',
+      'LAIN-LAIN',
+      '1. Hal yang belum diatur akan diatur dalam Surat Perjanjian Tambahan (addendum).',
+      '2. Jika PIHAK KEDUA tidak berada di tempat, wajib menunjuk wakil.',
+      '3. Dibuat dalam rangkap 2 asli di atas kertas bermaterai Rp. 6000,- (enam ribu rupiah).',
+      '',
+      'PASAL 5',
+      'PENUTUP',
+      'Surat Perjanjian Kerjasama ini berlaku sejak tanggal ditandatangani oleh Dra. Nina Dewi, MAP. dan Akbar Marwan.',
+    ].join('\n');
+
+    const doc2Res = await fetch(`${BASE_URL}/api/contracts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: 'Surat Perjanjian Kerjasama BKD Kaltim & PT Powernet',
+        fileName: 'SPK-BKD-Kaltim-Powernet-2021.pdf',
+        contractType: 'kerja',
+        contractText: bkdKaltimText,
+        useAICheck: true,
+        lang: 'id',
+      }),
+    });
+    const doc2Json = await doc2Res.json();
+    const doc2 = doc2Json.data;
+    assert(doc2Res.status === 201 && doc2Json.success === true, 'Sequential Doc 2 (BKD Kaltim & Powernet) upload returns 201');
+    assert(
+      doc2.typeId === 'Perjanjian Kerjasama / Jasa' && doc2.type === 'Partnership / Service',
+      `Doc 2 auto-detected as Perjanjian Kerjasama / Jasa (got: ${doc2.typeId})`
+    );
+    assert(
+      /Nina Dewi/i.test(doc2.meta.firstParty || '') &&
+        /BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR/i.test(doc2.meta.firstParty || ''),
+      `Doc 2 First Party contains Dra. Nina Dewi & BKD Prov. Kaltim (got: ${doc2.meta.firstParty})`
+    );
+    assert(
+      /Akbar Marwan/i.test(doc2.meta.secondParty || '') &&
+        /PT\. POWERNET INDOSOLUSI/i.test(doc2.meta.secondParty || ''),
+      `Doc 2 Second Party contains Akbar Marwan & PT. Powernet Indosolusi (got: ${doc2.meta.secondParty})`
+    );
+    assert(
+      doc2.meta.salary.includes('2.500.000') && doc2.meta.salary.includes('15.000.000'),
+      `Doc 2 Contract Value contains Rp2.500.000 and Rp15.000.000 (got: ${doc2.meta.salary})`
+    );
+    assert(
+      !doc2.meta.workingHours.includes('Senin - Jumat (40 jam/minggu)') &&
+        /1 Tahun.*Januari.*Desember 2021/i.test(doc2.meta.workingHours),
+      `Doc 2 workingHours/duration is 1 Tahun (Januari - Desember 2021), NOT hardcoded 40 jam/minggu (got: ${doc2.meta.workingHours})`
+    );
+    assert(
+      doc2.clauses.length === 5 &&
+        doc2.clauses.some((c) => /PASAL 1/i.test(c.title)) &&
+        doc2.clauses.some((c) => /PASAL 5/i.test(c.title)),
+      `Doc 2 extracts all 5 real articles (Pasal 1 s/d Pasal 5, count=${doc2.clauses.length})`
+    );
+    assert(
+      doc2.clauses.some((c) => /AKBAR MARWAN/i.test(c.meaning) && c.status === 'Needs Attention'),
+      'Doc 2 flags High-Risk payment transfer to personal BCA account a.n. AKBAR MARWAN'
+    );
+
+    // Step 32c: Test AI Chat on Document 2 (Fee & Bank Account + Parties)
+    const chatDoc2FeeRes = await fetch(`${BASE_URL}/api/contracts/${doc2.id}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question: 'Berapa biaya sewa server colocation dan dibayar ke rekening siapa?',
+        lang: 'id',
+      }),
+    });
+    const chatDoc2FeeData = await chatDoc2FeeRes.json();
+    assert(chatDoc2FeeRes.status === 200, 'Doc 2 Chat Q1 (Biaya & Rekening) returns 200');
+    assert(
+      chatDoc2FeeData.data.text.includes('2.500.000') &&
+        chatDoc2FeeData.data.text.includes('15.000.000') &&
+        /BCA.*MARGONDA/i.test(chatDoc2FeeData.data.text) &&
+        /AKBAR MARWAN/i.test(chatDoc2FeeData.data.text),
+      'Doc 2 Chat Q1 accurately cites Rp2.500.000/bln (Rp15.000.000/semester) and BCA Cabang Margonda a.n. Akbar Marwan'
+    );
+
+    const chatDoc2PartiesRes = await fetch(`${BASE_URL}/api/contracts/${doc2.id}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question: 'Siapa pihak pertama dan pihak kedua?',
+        lang: 'id',
+      }),
+    });
+    const chatDoc2PartiesData = await chatDoc2PartiesRes.json();
+    assert(chatDoc2PartiesRes.status === 200, 'Doc 2 Chat Q2 (Parties) returns 200');
+    assert(
+      /Nina Dewi/i.test(chatDoc2PartiesData.data.text) &&
+        /BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR/i.test(chatDoc2PartiesData.data.text) &&
+        /Akbar Marwan/i.test(chatDoc2PartiesData.data.text) &&
+        /PT\. POWERNET INDOSOLUSI/i.test(chatDoc2PartiesData.data.text),
+      'Doc 2 Chat Q2 accurately identifies Dra. Nina Dewi (BKD Kaltim) & Akbar Marwan (PT. Powernet Indosolusi)'
+    );
+
+    // Step 32d: Test Subscription Upgrade & Exhibition Reset Endpoints (/api/subscription/upgrade & /api/subscription/reset)
+    const upgRes = await fetch(`${BASE_URL}/api/subscription/upgrade`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ promoCode: 'PAMERAN', method: 'QRIS' }),
+    });
+    const upgData = await upgRes.json();
+    assert(upgRes.status === 200 && upgData.success === true, 'POST /api/subscription/upgrade returns 200');
+    assert(upgData.data.plan === 'HRD Pro' && upgData.data.promoApplied === true && upgData.data.amountPaid === 0, 'Promo code PAMERAN sets amountPaid=0 and plan=HRD Pro');
+
+    const rstRes = await fetch(`${BASE_URL}/api/subscription/reset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const rstData = await rstRes.json();
+    assert(rstRes.status === 200 && rstData.success === true && rstData.data.plan === 'Free', 'POST /api/subscription/reset restores plan to Free');
+
+    // Cleanup Sequential Test Contracts
+    if (doc1 && doc1.id) {
+      await fetch(`${BASE_URL}/api/contracts/${doc1.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+    if (doc2 && doc2.id) {
+      await fetch(`${BASE_URL}/api/contracts/${doc2.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+  } catch (err) {
+    assert(false, `Sequential Doc 1 -> Doc 2 test failed: ${err.message}`);
   }
 
   console.log('\n--- TEST RESULTS SUMMARY ---');
