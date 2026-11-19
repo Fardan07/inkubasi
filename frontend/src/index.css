@@ -2355,20 +2355,21 @@ html, body {
 }
 
 .sig-rendered-img {
+  position: relative;
+  z-index: 3;
+  mix-blend-mode: multiply;
   max-width: 165px;
-  max-height: 70px;
+  max-height: 68px;
   width: auto;
   height: auto;
   object-fit: contain;
-  position: relative;
-  z-index: 3;
   pointer-events: none;
   box-sizing: border-box;
 }
 
 .sig-rendered-img.with-emeterai {
-  padding-left: 28px;
-  max-width: 175px;
+  padding-left: 16px;
+  max-width: 165px;
 }
 
 .sig-placeholder-line {
@@ -2380,7 +2381,7 @@ html, body {
 }
 
 .sig-placeholder-line.with-emeterai {
-  padding-left: 32px;
+  padding-left: 24px;
 }
 
 /* Official Corporate Stamp Overlay (Shifted Left, Never Hits Header/Footer) */
@@ -2431,7 +2432,22 @@ html, body {
   margin-top: 2px;
 }
 
-/* Visual E-Meterai Rp10.000 (Peruri Style — Left Side of Signature Stage) */
+/* Authentic Meterai Rp10.000 Image Behind Signature Layer */
+.emeterai-seal-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-55%, -50%);
+  width: 84px;
+  height: auto;
+  object-fit: contain;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.96;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 .emeterai-seal-box {
   position: absolute;
   left: 6px;
@@ -2452,6 +2468,71 @@ html, body {
   padding: 5px 4px;
   box-shadow: 0 1px 4px rgba(157, 23, 77, 0.14);
   pointer-events: none;
+}
+
+/* Screen Print Table Wrapper (Zero Visual Impact on Screen) */
+.print-only-spacer {
+  display: none;
+}
+.print-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.print-doc-body-cell {
+  padding: 0;
+  border: none;
+}
+.contract-closing-and-signatures {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+/* ============================================================ */
+/* SKELETON LOADING SHIMMER SYSTEM                              */
+/* ============================================================ */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-block,
+.skeleton-line,
+.skeleton-circle {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.45s ease-in-out infinite;
+  display: block;
+}
+
+.skeleton-block {
+  border-radius: 10px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+}
+
+.skeleton-circle {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.page-skeleton-wrap {
+  width: 100%;
+  animation: pageEnter 0.22s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block,
+  .skeleton-line,
+  .skeleton-circle {
+    animation: none !important;
+  }
 }
 
 .emeterai-top {
@@ -2588,7 +2669,7 @@ html, body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 14mm 18mm;
+    margin: 0 !important;
   }
   html, body {
     background: #ffffff !important;
@@ -2603,7 +2684,11 @@ html, body {
   .hrd-form-card,
   .legal-document-toolbar,
   .toast-wrapper,
-  .modal-backdrop {
+  .modal-backdrop,
+  .page-skeleton-wrap,
+  .skeleton-block,
+  .skeleton-line,
+  .skeleton-circle {
     display: none !important;
   }
   .app,
@@ -2640,6 +2725,26 @@ html, body {
     line-height: 1.42 !important;
     color: #000000 !important;
   }
+  .print-doc-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  thead.print-only-spacer {
+    display: table-header-group !important;
+  }
+  tfoot.print-only-spacer {
+    display: table-footer-group !important;
+  }
+  .print-top-margin {
+    height: 20mm !important;
+  }
+  .print-bottom-margin {
+    height: 18mm !important;
+  }
+  .print-doc-body-cell {
+    padding: 0 22mm !important;
+    border: none !important;
+  }
   .legal-doc-letterhead {
     padding-bottom: 8px !important;
     margin-bottom: 12px !important;
@@ -2669,6 +2774,7 @@ html, body {
   .legal-doc-article p {
     margin: 0 0 3px !important;
   }
+  .contract-closing-and-signatures,
   .signature-block,
   .legal-doc-closing-block,
   .signature-grid,
@@ -2683,6 +2789,7 @@ html, body {
     margin: 4px auto !important;
   }
   .corporate-stamp-seal,
+  .emeterai-seal-img,
   .emeterai-seal-box {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;

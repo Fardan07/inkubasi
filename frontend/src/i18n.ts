@@ -341,6 +341,7 @@ export const translations = {
     auth_err_email_invalid: "Format email tidak valid (contoh: nama@perusahaan.com).",
     auth_err_pass_required: "Kata sandi wajib diisi.",
     auth_err_pass_length: "Kata sandi minimal harus 6 karakter.",
+    session_expired_toast: "Sesi Anda telah berakhir karena tidak aktif selama 24 jam. Silakan masuk kembali.",
 
     upload_docx_guidance: "Format Word (.docx) dapat disalin langsung: silakan gunakan tab 'Tempel Teks Pasal (Paste)' untuk analisis instan.",
     upload_image_guidance: "Dokumen gambar/scan belum mendukung ekstraksi otomatis. Silakan gunakan PDF berbasis teks atau salin isi kontrak ke tab 'Tempel Teks Pasal'.",
@@ -797,6 +798,7 @@ export const translations = {
     auth_err_email_invalid: "Invalid email format (e.g. name@domain.com).",
     auth_err_pass_required: "Password is required.",
     auth_err_pass_length: "Password must be at least 6 characters.",
+    session_expired_toast: "Your session has expired after 24 hours of inactivity. Please sign in again.",
 
     upload_docx_guidance: "For Word (.docx) files, please copy and paste the text into the 'Paste Contract Text' tab for instant analysis.",
     upload_image_guidance: "Scanned image documents do not support auto-text extraction yet. Please use a text-based PDF or paste contract text.",

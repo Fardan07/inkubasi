@@ -533,6 +533,26 @@ app.get('/api/contract-check/legal/:type?', (req, res) => {
 // AUTH UTILITIES & MIDDLEWARE
 // ==========================================
 
+app.use((req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      if (err && err.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          success: false,
+          error: 'Sesi telah berakhir. Silakan masuk kembali.',
+          message: 'Sesi telah berakhir. Silakan masuk kembali.',
+          code: 'SESSION_EXPIRED',
+        });
+      }
+    }
+  }
+  next();
+});
+
 const getUserFromReq = async (req) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -550,7 +570,10 @@ const getUserFromReq = async (req) => {
       const user = inMemoryUsers.find((u) => u.id === decoded.id);
       return user || null;
     }
-  } catch {
+  } catch (err) {
+    if (err && err.name === 'TokenExpiredError') {
+      req.tokenExpired = true;
+    }
     return null;
   }
 };
@@ -831,7 +854,7 @@ app.post('/api/auth/register', async (req, res) => {
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, name: newUser.name },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     );
 
     res.status(201).json({
@@ -890,7 +913,7 @@ app.post('/api/auth/login', async (req, res) => {
     const token = jwt.sign(
       { id: foundUser.id, email: foundUser.email, name: foundUser.name },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     );
 
     // Update session info

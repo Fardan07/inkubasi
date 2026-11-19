@@ -1,6 +1,9 @@
 import fs from 'fs';
+import 'dotenv/config';
+import jwt from 'jsonwebtoken';
 
 const BASE_URL = 'http://localhost:5000';
+const JWT_SECRET = process.env.JWT_SECRET || 'clariq-dev-secret-key-2027';
 
 async function runTests() {
   const results = [];
@@ -1193,6 +1196,32 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
     }
   } catch (err) {
     assert(false, `Sequential Doc 1 -> Doc 2 test failed: ${err.message}`);
+  }
+
+  // 33. JWT 24-Hour Expiry & Expired Session Auto-Logout Guardrail (SESSION_EXPIRED)
+  try {
+    const decoded = jwt.decode(token);
+    assert(
+      decoded && typeof decoded.exp === 'number' && typeof decoded.iat === 'number' && decoded.exp - decoded.iat === 86400,
+      `Login JWT payload has 24-hour TTL (exp - iat === 86400, got: ${decoded ? decoded.exp - decoded.iat : 'null'})`
+    );
+
+    const expiredToken = jwt.sign(
+      { id: 1, name: 'Test Expired', email: 'expired@clariq.id', plan: 'Free' },
+      JWT_SECRET,
+      { expiresIn: '-10s' }
+    );
+    const expRes = await fetch(`${BASE_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${expiredToken}` },
+    });
+    const expData = await expRes.json();
+    assert(expRes.status === 401, `Expired JWT to GET /api/auth/me returns 401 (got ${expRes.status})`);
+    assert(
+      expData.code === 'SESSION_EXPIRED' && /Sesi telah berakhir/i.test(expData.error || ''),
+      `Expired JWT response returns code: "SESSION_EXPIRED" and Indonesian expiry message`
+    );
+  } catch (err) {
+    assert(false, `JWT 24-hour expiry test failed: ${err.message}`);
   }
 
   console.log('\n--- TEST RESULTS SUMMARY ---');
