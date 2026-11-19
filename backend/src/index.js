@@ -261,6 +261,10 @@ let contracts = [
   },
 ];
 
+for (const contract of contracts) {
+  contract.userId = 1;
+}
+
 let datesList = [
   {
     id: 1,
@@ -1193,6 +1197,10 @@ app.post('/api/contracts', async (req, res) => {
 
       const persisted = await persistContractToDb(newContract, req);
       const finalContract = persisted || newContract;
+      if (!finalContract.userId) {
+        const loggedUser = await getUserFromReq(req);
+        if (loggedUser) finalContract.userId = loggedUser.id;
+      }
 
       contracts.unshift(finalContract);
       userProfile.analyzedCount += 1;
@@ -1302,6 +1310,10 @@ app.post('/api/contracts', async (req, res) => {
 
   const persisted = await persistContractToDb(newContract, req);
   const finalContract = persisted || newContract;
+  if (!finalContract.userId) {
+    const loggedUser = await getUserFromReq(req);
+    if (loggedUser) finalContract.userId = loggedUser.id;
+  }
 
   contracts.unshift(finalContract);
   userProfile.analyzedCount += 1;
@@ -1340,6 +1352,12 @@ app.delete('/api/contracts/:id', async (req, res) => {
   const index = contracts.findIndex((c) => c.id === id);
   if (index === -1 && !deletedFromDb) {
     return res.status(404).json({ success: false, message: 'Kontrak tidak ditemukan.' });
+  }
+  if (index !== -1) {
+    const found = contracts[index];
+    if (found.userId && loggedUser && found.userId !== loggedUser.id) {
+      return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk menghapus kontrak ini.' });
+    }
   }
   const deleted = index !== -1 ? contracts.splice(index, 1)[0] : { id, name: `Kontrak #${id}` };
   res.json({
