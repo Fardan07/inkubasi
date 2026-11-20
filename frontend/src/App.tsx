@@ -454,6 +454,89 @@ type Clause = {
   whyEn?: string
   original: string
 }
+function FormattedChatMessage({ text }: { text: string }) {
+  const renderInlineBold = (str: string) => {
+    const parts = str.split(/(\*\*[^*]+\*\*)/g)
+    return parts.map((part, idx) => {
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+        return <strong key={idx}>{part.slice(2, -2)}</strong>
+      }
+      return <span key={idx}>{part}</span>
+    })
+  }
+
+  // Normalisasi jika masih ada bullet sebaris (• Item 1. • Item 2.) menjadi baris terpisah
+  const normalized = String(text || "").replace(/\s+•\s+/g, "\n- ")
+  const rawLines = normalized.split(/\r?\n/)
+
+  const blocks: Array<
+    | { type: "p"; text: string }
+    | { type: "ul"; items: string[] }
+    | { type: "ol"; items: string[] }
+  > = []
+
+  let currentList: { type: "ul" | "ol"; items: string[] } | null = null
+  const flushList = () => {
+    if (currentList) {
+      blocks.push(currentList)
+      currentList = null
+    }
+  }
+
+  for (const line of rawLines) {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      flushList()
+      continue
+    }
+    const ulMatch = trimmed.match(/^(?:[-*•])\s+(.+)$/)
+    const olMatch = trimmed.match(/^\d+\.\s+(.+)$/)
+    if (ulMatch) {
+      if (!currentList || currentList.type !== "ul") {
+        flushList()
+        currentList = { type: "ul", items: [] }
+      }
+      currentList.items.push(ulMatch[1])
+    } else if (olMatch) {
+      if (!currentList || currentList.type !== "ol") {
+        flushList()
+        currentList = { type: "ol", items: [] }
+      }
+      currentList.items.push(olMatch[1])
+    } else {
+      flushList()
+      blocks.push({ type: "p", text: trimmed })
+    }
+  }
+  flushList()
+
+  return (
+    <div className="chat-formatted-body">
+      {blocks.map((blk, idx) => {
+        if (blk.type === "ul") {
+          return (
+            <ul key={idx}>
+              {blk.items.map((item, j) => (
+                <li key={j}>{renderInlineBold(item)}</li>
+              ))}
+            </ul>
+          )
+        }
+        if (blk.type === "ol") {
+          return (
+            <ol key={idx}>
+              {blk.items.map((item, j) => (
+                <li key={j}>{renderInlineBold(item)}</li>
+              ))}
+            </ol>
+          )
+        }
+        return <p key={idx}>{renderInlineBold(blk.text)}</p>
+      })}
+    </div>
+  )
+}
+
 type Contract = {
   id: number
   name: string
@@ -469,7 +552,8 @@ type Contract = {
   summary?: string
   riskScore?: number
   riskBreakdown?: { safe: number; review: number; attention: number }
-  meta?: Record<string, string>
+  suggestedQuestions?: string[]
+  meta?: Record<string, any>
   clauses?: Clause[]
 }
 
@@ -914,7 +998,7 @@ export default function App() {
     source?: number | null
     provider?: "GEMINI" | "CLARIQ"
   }[]>([])
-  const [compareFiles, setCompareFiles] = useState<string[]>(["", ""])
+  const [isChatLoading, setIsChatLoading] = useState(false)
   const [compared, setCompared] = useState(false)
   const [compareData, setCompareData] = useState<any>(null)
   const [compareIdA, setCompareIdA] = useState<number | string>("")
@@ -1028,7 +1112,8 @@ export default function App() {
     setSelected(null)
     setDates([])
     setReminders([])
-    setCompareFiles(["", ""])
+    setCompareIdA("")
+    setCompareIdB("")
     setCompared(false)
     setProfile(false)
     setMobileNav(false)
@@ -1045,7 +1130,8 @@ export default function App() {
       setSelected(null)
       setDates([])
       setReminders([])
-      setCompareFiles(["", ""])
+      setCompareIdA("")
+      setCompareIdB("")
       setCompared(false)
       setIsAppLoading(false)
       return
@@ -1076,8 +1162,18 @@ export default function App() {
           }))
           setContracts(enriched)
           setSelected(enriched.length > 0 ? enriched[0] : null)
-          setCompareIdA((prev) => prev || (enriched[0]?.id || 1))
-          setCompareIdB((prev) => prev || (enriched[1]?.id || enriched[0]?.id || 2))
+          const resolvedA = enriched.some((c: Contract) => String(c.id) === String(compareIdA))
+            ? compareIdA
+            : (enriched[0]?.id ?? "")
+          setCompareIdA(resolvedA)
+          setCompareIdB((prev) => {
+            if (enriched.length >= 2) {
+              const prevValid = enriched.some((c: Contract) => String(c.id) === String(prev))
+              if (prevValid && String(prev) !== String(resolvedA)) return prev
+              return enriched[1]?.id ?? ""
+            }
+            return enriched[0]?.id ?? ""
+          })
         } else {
           setContracts([])
           setSelected(null)
@@ -1228,6 +1324,13 @@ export default function App() {
         return
       }
       setContracts((prev) => prev.filter((c) => c.id !== contract.id))
+      setDates((prev) => {
+        const removedIds = new Set(prev.filter((d) => String(d.contractId) === String(contract.id)).map((d) => d.id))
+        if (removedIds.size > 0) {
+          setReminders((rPrev) => rPrev.filter((rid) => !removedIds.has(rid)))
+        }
+        return prev.filter((d) => String(d.contractId) !== String(contract.id))
+      })
       if (selected?.id === contract.id) {
         const remaining = contracts.filter((c) => c.id !== contract.id)
         setSelected(remaining[0] || null)
@@ -1255,7 +1358,8 @@ export default function App() {
     setSelected(null)
     setDates([])
     setReminders([])
-    setCompareFiles(["", ""])
+    setCompareIdA("")
+    setCompareIdB("")
     setCompared(false)
     setProfile(false)
     setMobileNav(false)
@@ -1561,12 +1665,12 @@ export default function App() {
     }
   }, [modalOpen, original, uploadFile])
   useEffect(() => {
-    if (messages.length)
+    if (messages.length || isChatLoading)
       chatBottom.current?.scrollIntoView({
         behavior: "smooth",
         block: "nearest",
       })
-  }, [messages])
+  }, [messages, isChatLoading])
   const openContract = (contract: Contract) => {
     setSelected(contract)
     navigate("analysis")
@@ -1768,10 +1872,11 @@ export default function App() {
     }
   }
   const ask = async (text = question) => {
-    if (!text.trim()) return
+    if (!text.trim() || isChatLoading) return
     const userMsg = { role: "user", text }
     setMessages((prev) => [...prev, userMsg])
     setQuestion("")
+    setIsChatLoading(true)
 
     try {
       const activeToken = localStorage.getItem("clariq_token") || token
@@ -1807,49 +1912,62 @@ export default function App() {
           return
         }
       }
-    } catch {
-      // Local fallback
-    }
 
-    let source = 1
-    let answer =
-      lang === "id"
-        ? "Jika Anda mengundurkan diri sebelum 12 Januari 2028, Anda perlu memberikan pemberitahuan tertulis 30 hari sebelumnya. Anda juga dapat dikenakan ganti rugi sebesar satu bulan gaji kotor (Rp12.000.000). Diskusikan ketentuan ini dengan perusahaan Anda."
-        : "If you resign before 12 January 2028, you need to give 30 days’ written notice. You may also owe compensation equal to one month’s gross salary (Rp12,000,000). Consider discussing this condition with your employer before making a decision."
-    if (/end|expire|duration|berakhir|selesai|jangka/i.test(text)) {
-      source = 2
-      answer =
+      let source = 1
+      let answer =
         lang === "id"
-          ? "Perjanjian contoh ini berlaku dari 13 Januari 2027 hingga 12 Januari 2028 (12 bulan). Kontrak akan diperpanjang secara otomatis jika tidak ada pemberitahuan tertulis setidaknya 30 hari sebelum masa berlaku habis."
-          : "The sample agreement runs from 13 January 2027 to 12 January 2028. It automatically renews for another 12 months unless either party gives written notice at least 30 days before expiry."
-    } else if (/renew|perpanjang/i.test(text)) {
-      source = 2
-      answer =
-        lang === "id"
-          ? "Ya. Kontrak ini diperpanjang otomatis selama 12 bulan. Untuk menghindari perpanjangan otomatis, kirimkan pemberitahuan tertulis paling lambat 12 Desember 2027—yaitu 30 hari sebelum kontrak berakhir."
-          : "Yes. The sample agreement renews automatically for 12 months. To avoid renewal, submit written notice by 12 December 2027—30 days before the contract expires."
-    } else if (/responsib|duties|tugas|tanggung jawab|peran/i.test(text)) {
-      source = 4
-      answer =
-        lang === "id"
-          ? "Tanggung jawab utama Anda adalah sebagai Product Designer, 40 jam per minggu, melapor kepada Head of Design. Setiap perubahan tugas signifikan harus disepakati secara tertulis."
-          : "Your main responsibility is working as a Product Designer, 40 hours per week, reporting to the Head of Design. Any material changes to your role must be agreed in writing."
-    } else if (/pay|salary|gaji|upah|uang/i.test(text)) {
-      source = 0
-      answer =
-        lang === "id"
-          ? "Gaji kotor bulanan Anda adalah Rp12.000.000, dibayarkan paling lambat tanggal 25 setiap bulannya. Tunjangan mengikuti ketentuan tertulis perusahaan."
-          : "Your gross monthly salary is Rp12,000,000, paid no later than the 25th of each month. Benefits follow the company’s written policies."
-    } else if (!/resign|early|terminat|quit|keluar|mundur/i.test(text)) {
-      answer =
-        lang === "id"
-          ? "AI Cek Kontrak dapat menjelaskan klausul pembayaran, pengakhiran kontrak, perpanjangan otomatis, dan tanggung jawab kerja. Terkait pertanyaan Anda, pasal rujukan utama adalah Pasal 8: masing-masing pihak harus memberikan pemberitahuan tertulis 30 hari."
-          : "This prototype can explain the sample agreement’s payment, termination, renewal, and responsibilities clauses. For your question, the relevant starting point is Article 8: either party must give 30 days’ written notice to end the agreement."
+          ? "Jika Anda mengundurkan diri sebelum 12 Januari 2028, Anda perlu memberikan pemberitahuan tertulis 30 hari sebelumnya. Anda juga dapat dikenakan ganti rugi sebesar satu bulan gaji kotor (Rp12.000.000). Diskusikan ketentuan ini dengan perusahaan Anda."
+          : "If you resign before 12 January 2028, you need to give 30 days’ written notice. You may also owe compensation equal to one month’s gross salary (Rp12,000,000). Consider discussing this condition with your employer before making a decision."
+      if (/end|expire|duration|berakhir|selesai|jangka/i.test(text)) {
+        source = 2
+        answer =
+          lang === "id"
+            ? "Perjanjian contoh ini berlaku dari 13 Januari 2027 hingga 12 Januari 2028 (12 bulan). Kontrak akan diperpanjang secara otomatis jika tidak ada pemberitahuan tertulis setidaknya 30 hari sebelum masa berlaku habis."
+            : "The sample agreement runs from 13 January 2027 to 12 January 2028. It automatically renews for another 12 months unless either party gives written notice at least 30 days before expiry."
+      } else if (/renew|perpanjang/i.test(text)) {
+        source = 2
+        answer =
+          lang === "id"
+            ? "Ya. Kontrak ini diperpanjang otomatis selama 12 bulan. Untuk menghindari perpanjangan otomatis, kirimkan pemberitahuan tertulis paling lambat 12 Desember 2027—yaitu 30 hari sebelum kontrak berakhir."
+            : "Yes. The sample agreement renews automatically for 12 months. To avoid renewal, submit written notice by 12 December 2027—30 days before the contract expires."
+      } else if (/responsib|duties|tugas|tanggung jawab|peran/i.test(text)) {
+        source = 4
+        answer =
+          lang === "id"
+            ? "Tanggung jawab utama Anda adalah sebagai Product Designer, 40 jam per minggu, melapor kepada Head of Design. Setiap perubahan tugas signifikan harus disepakati secara tertulis."
+            : "Your main responsibility is working as a Product Designer, 40 hours per week, reporting to the Head of Design. Any material changes to your role must be agreed in writing."
+      } else if (/pay|salary|gaji|upah|uang/i.test(text)) {
+        source = 0
+        answer =
+          lang === "id"
+            ? "Gaji kotor bulanan Anda adalah Rp12.000.000, dibayarkan paling lambat tanggal 25 setiap bulannya. Tunjangan mengikuti ketentuan tertulis perusahaan."
+            : "Your gross monthly salary is Rp12,000,000, paid no later than the 25th of each month. Benefits follow the company’s written policies."
+      } else if (!/resign|early|terminat|quit|keluar|mundur/i.test(text)) {
+        answer =
+          lang === "id"
+            ? "AI Cek Kontrak dapat menjelaskan klausul pembayaran, pengakhiran kontrak, perpanjangan otomatis, dan tanggung jawab kerja. Terkait pertanyaan Anda, pasal rujukan utama adalah Pasal 8: masing-masing pihak harus memberikan pemberitahuan tertulis 30 hari."
+            : "This prototype can explain the sample agreement’s payment, termination, renewal, and responsibilities clauses. For your question, the relevant starting point is Article 8: either party must give 30 days’ written notice to end the agreement."
+      }
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: answer, source, provider: "CLARIQ" },
+      ])
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text:
+            lang === "id"
+              ? "Maaf, terjadi gangguan koneksi ke server AI. Silakan coba kirim ulang pertanyaan Anda."
+              : "Sorry, a connection issue occurred. Please resend your question.",
+          source: null,
+          provider: "CLARIQ",
+        },
+      ])
+    } finally {
+      setIsChatLoading(false)
     }
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", text: answer, source },
-    ])
   }
   const [checkoutMethod, setCheckoutMethod] = useState<"QRIS" | "BCA_VA" | "MANDIRI_VA">("QRIS")
   const [promoCode, setPromoCode] = useState("")
@@ -4100,7 +4218,9 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                       icon: "shield" as IconName,
                       label: isNonEmployment
                         ? lang === "id"
-                          ? "Perubahan & Pengakhiran"
+                          ? /pengakhiran\s+tidak\s+diatur/i.test(`${selected.meta?.noticePeriod || ""} ${selected.meta?.probationPeriod || ""}`)
+                            ? "Perubahan & Addendum"
+                            : "Perubahan & Pengakhiran"
                           : "Amendments & Termination"
                         : t.insight_probation_title,
                       value:
@@ -4307,13 +4427,16 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                         {t.chat_empty_desc}
                       </p>
                       <div className="suggested-questions">
-                        {[
-                          t.chat_suggested_1,
-                          t.chat_suggested_2,
-                          t.chat_suggested_3,
-                          t.chat_suggested_4,
-                        ].map((q) => (
-                          <button onClick={() => ask(q)} key={q}>
+                        {(selected.suggestedQuestions && selected.suggestedQuestions.length > 0
+                          ? selected.suggestedQuestions
+                          : [
+                              t.chat_suggested_1,
+                              t.chat_suggested_2,
+                              t.chat_suggested_3,
+                              t.chat_suggested_4,
+                            ]
+                        ).map((q) => (
+                          <button onClick={() => ask(q)} key={q} disabled={isChatLoading}>
                             {q}
                             <Icon name="arrow" size={15} />
                           </button>
@@ -4321,75 +4444,149 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                       </div>
                     </div>
                   ) : (
-                    messages.map((m, i) => (
-                      <div key={i} className={`chat-message ${m.role}`}>
-                        <span
-                          className={
-                            m.role === "assistant"
-                              ? "assistant-avatar"
-                              : "avatar"
-                          }
-                        >
-                          {m.role === "assistant" ? (
-                            <Icon name="spark" size={19} />
-                          ) : (
-                            name.slice(0, 2).toUpperCase() || "PA"
-                          )}
-                        </span>
-                        <div>
-                          <span className="message-author">
-                            {m.role === "assistant"
-                              ? "AI Cek Kontrak"
-                              : name.split(" ")[0]}
-                            {m.role === "assistant" && (
-                              <small>{m.provider === "GEMINI" ? "AI · GEMINI" : "AI · CLARIQ"}</small>
+                    <>
+                      {messages.map((m, i) => (
+                        <div key={i} className={`chat-message ${m.role}`}>
+                          <span
+                            className={
+                              m.role === "assistant"
+                                ? "assistant-avatar"
+                                : "avatar"
+                            }
+                          >
+                            {m.role === "assistant" ? (
+                              <Icon name="spark" size={19} />
+                            ) : (
+                              name.slice(0, 2).toUpperCase() || "PA"
                             )}
                           </span>
-                          <p>{m.text}</p>
-                          {m.source !== null && m.source !== undefined && m.source >= 0 && (
-                            <div className="chat-citation">
-                              <small>
-                                {t.chat_citation_based}{" "}
-                                {lang === "id"
-                                  ? (activeClauses[m.source] || clauses[m.source] || clauses[0]).sourceId || (activeClauses[m.source] || clauses[m.source] || clauses[0]).source
-                                  : (activeClauses[m.source] || clauses[m.source] || clauses[0]).source}
-                              </small>
-                              <button
-                                onClick={() => {
-                                  openClause(m.source!)
-                                  setOriginal(true)
-                                }}
-                              >
-                                <Icon name="file" size={13} />
-                                {t.chat_citation_view}
-                                <Icon name="external" size={12} />
-                              </button>
-                            </div>
-                          )}
+                          <div>
+                            <span className="message-author">
+                              {m.role === "assistant"
+                                ? "AI Cek Kontrak"
+                                : name.split(" ")[0]}
+                              {m.role === "assistant" && (
+                                <small>{m.provider === "GEMINI" ? "AI · GEMINI" : "AI · CLARIQ"}</small>
+                              )}
+                            </span>
+                            {m.role === "assistant" ? (
+                              <FormattedChatMessage text={m.text} />
+                            ) : (
+                              <p>{m.text}</p>
+                            )}
+                            {m.source !== null && m.source !== undefined && m.source >= 0 && (
+                              <div className="chat-citation">
+                                <small>
+                                  {t.chat_citation_based}{" "}
+                                  {lang === "id"
+                                    ? (activeClauses[m.source] || clauses[m.source] || clauses[0]).sourceId || (activeClauses[m.source] || clauses[m.source] || clauses[0]).source
+                                    : (activeClauses[m.source] || clauses[m.source] || clauses[0]).source}
+                                </small>
+                                <button
+                                  onClick={() => {
+                                    openClause(m.source!)
+                                    setOriginal(true)
+                                  }}
+                                >
+                                  <Icon name="file" size={13} />
+                                  {t.chat_citation_view}
+                                  <Icon name="external" size={12} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      ))}
+                      {isChatLoading && (
+                        <div className="chat-message assistant chat-loading-bubble" role="status" aria-live="polite">
+                          <span className="assistant-avatar">
+                            <Icon name="spark" size={19} />
+                          </span>
+                          <div>
+                            <span className="message-author">
+                              AI Cek Kontrak
+                              <small>AI · GEMINI</small>
+                            </span>
+                            <div className="chat-loading-status">
+                              <span>{t.chat_loading_status}</span>
+                              <span className="typing-dots" aria-hidden="true">
+                                <span />
+                                <span />
+                                <span />
+                              </span>
+                            </div>
+                            <div className="chat-loading-shimmer" aria-hidden="true">
+                              <div className="skeleton-line" style={{ width: "90%" }} />
+                              <div className="skeleton-line sm" style={{ width: "65%" }} />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                   <div ref={chatBottom} />
                 </div>
                 <div className="quick-chips-container" role="group" aria-label="Quick questions">
-                  {[
-                    { text: lang === "id" ? "Berapa gaji & kapan dibayar?" : "What is the salary & payment schedule?", label: t.chip_salary, icon: "chat" as IconName },
-                    { text: lang === "id" ? "Apakah ada denda jika resign?" : "Is there a resignation penalty?", label: t.chip_penalty, icon: "warning" as IconName },
-                    { text: lang === "id" ? "Apakah ada masa uji coba?" : "Is there a probation period?", label: t.chip_probation, icon: "shield" as IconName },
-                    { text: lang === "id" ? "Bagaimana aturan jam kerjanya?" : "What are the working hours?", label: t.chip_hours, icon: "clock" as IconName },
-                  ].map((chip) => (
-                    <button
-                      key={chip.text}
-                      type="button"
-                      className="quick-chip-btn"
-                      onClick={() => ask(chip.text)}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-                    >
-                      <Icon name={chip.icon} size={13} />
-                      <span>{chip.label}</span>
-                    </button>
-                  ))}
+                  {(() => {
+                    const isPartnership =
+                      selected.meta?.detectedCategory === "kerjasama" ||
+                      /kerjasama|partnership|service|jasa|vendor/i.test(`${selected.type || ""} ${selected.typeId || ""}`)
+                    const isRental =
+                      selected.meta?.detectedCategory === "sewa" ||
+                      /rental|sewa|lease/i.test(`${selected.type || ""} ${selected.typeId || ""}`)
+                    const isEmployment =
+                      selected.meta?.detectedCategory === "kerja" ||
+                      /employment|kerja|pkwt|pkwtt/i.test(`${selected.type || ""} ${selected.typeId || ""}`)
+
+                    const dynamicChips =
+                      selected.suggestedQuestions && selected.suggestedQuestions.length > 0
+                        ? selected.suggestedQuestions.slice(0, 4).map((qText, idx) => ({
+                            text: qText,
+                            label: qText,
+                            icon: (idx === 0 ? "chat" : idx === 1 ? "warning" : idx === 2 ? "shield" : "clock") as IconName,
+                          }))
+                        : isPartnership
+                        ? [
+                            { text: lang === "id" ? "Berapa total nilai kontrak setahun?" : "What is the annual contract value?", label: lang === "id" ? "Total nilai setahun" : "Annual value", icon: "chat" as IconName },
+                            { text: lang === "id" ? "Klausul penting apa saja yang belum diatur?" : "What key clauses are missing?", label: lang === "id" ? "Klausul belum diatur" : "Missing clauses", icon: "warning" as IconName },
+                            { text: lang === "id" ? "Apakah ada klausul pengakhiran kontrak?" : "Is there a termination clause?", label: lang === "id" ? "Pengakhiran kontrak" : "Termination", icon: "shield" as IconName },
+                            { text: lang === "id" ? "Siapa para pihak & ruang lingkup kerjasamanya?" : "Who are the parties & scope?", label: lang === "id" ? "Para pihak & lingkup" : "Parties & scope", icon: "clock" as IconName },
+                          ]
+                        : isRental
+                        ? [
+                            { text: lang === "id" ? "Berapa biaya sewa dan uang depositnya?" : "What are the rent and deposit terms?", label: lang === "id" ? "Biaya sewa & deposit" : "Rent & deposit", icon: "chat" as IconName },
+                            { text: lang === "id" ? "Berapa lama jangka waktu sewa & perpanjangannya?" : "How long is the lease term?", label: lang === "id" ? "Jangka waktu sewa" : "Lease term", icon: "clock" as IconName },
+                            { text: lang === "id" ? "Siapa yang menanggung biaya perbaikan properti?" : "Who covers maintenance?", label: lang === "id" ? "Tanggung jawab perawatan" : "Maintenance", icon: "warning" as IconName },
+                            { text: lang === "id" ? "Bagaimana ketentuan pengakhiran sewanya?" : "How does early termination work?", label: lang === "id" ? "Pengakhiran sewa" : "Termination", icon: "shield" as IconName },
+                          ]
+                        : isEmployment
+                        ? [
+                            { text: lang === "id" ? "Berapa gaji & kapan dibayar?" : "What is the salary & payment schedule?", label: t.chip_salary, icon: "chat" as IconName },
+                            { text: lang === "id" ? "Apakah ada denda jika resign?" : "Is there a resignation penalty?", label: t.chip_penalty, icon: "warning" as IconName },
+                            { text: lang === "id" ? "Apakah ada masa uji coba?" : "Is there a probation period?", label: t.chip_probation, icon: "shield" as IconName },
+                            { text: lang === "id" ? "Bagaimana aturan jam kerjanya?" : "What are the working hours?", label: t.chip_hours, icon: "clock" as IconName },
+                          ]
+                        : [
+                            { text: lang === "id" ? "Jelaskan ringkasan isi kontrak ini untuk orang awam" : "Summarize this contract", label: lang === "id" ? "Ringkasan isi kontrak" : "Contract summary", icon: "chat" as IconName },
+                            { text: lang === "id" ? "Apa saja kewajiban utama para pihak?" : "What are the main obligations?", label: lang === "id" ? "Kewajiban utama" : "Main obligations", icon: "shield" as IconName },
+                            { text: lang === "id" ? "Berapa nominal & jadwal pembayarannya?" : "What are the payment terms?", label: lang === "id" ? "Nominal & pembayaran" : "Payment terms", icon: "clock" as IconName },
+                            { text: lang === "id" ? "Apa poin berisiko yang wajib diwaspadai?" : "What are the key risks?", label: lang === "id" ? "Poin berisiko" : "Key risks", icon: "warning" as IconName },
+                          ]
+
+                    return dynamicChips.map((chip) => (
+                      <button
+                        key={chip.text}
+                        type="button"
+                        className="quick-chip-btn"
+                        disabled={isChatLoading}
+                        onClick={() => ask(chip.text)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                      >
+                        <Icon name={chip.icon} size={13} />
+                        <span>{chip.label}</span>
+                      </button>
+                    ))
+                  })()}
                 </div>
                 <form
                   className="chat-input-wrap"
@@ -4402,6 +4599,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                     <input
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
+                      disabled={isChatLoading}
                       aria-label="Question about your contract"
                       placeholder={t.chat_input_placeholder}
                     />
@@ -4409,7 +4607,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                       type="submit"
                       className="send-button"
                       aria-label="Send question"
-                      disabled={!question.trim()}
+                      disabled={isChatLoading || !question.trim()}
                     >
                       <Icon name="arrow" size={20} />
                     </button>
@@ -4425,8 +4623,12 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
           )}
           {page === "compare" && (
             (() => {
-              const contractA = contracts.find((c) => String(c.id) === String(compareIdA)) || contracts[0]
-              const contractB = contracts.find((c) => String(c.id) === String(compareIdB)) || contracts[1] || contracts[0]
+              const contractA = contracts.length > 0
+                ? (contracts.find((c) => String(c.id) === String(compareIdA)) || contracts[0])
+                : undefined
+              const contractB = contracts.length > 0
+                ? (contracts.find((c) => String(c.id) === String(compareIdB)) || contracts[1] || contracts[0])
+                : undefined
               return (
             <>
               <div className="page-heading">
@@ -4439,8 +4641,12 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 </div>
                 <Button
                   icon="compare"
-                  disabled={!contractA && !contractB && compareFiles.some((f) => !f)}
+                  disabled={contracts.length < 2}
                   onClick={() => {
+                    if (contractA && contractB && String(contractA.id) === String(contractB.id)) {
+                      setToast(t.compare_same_doc_toast)
+                      return
+                    }
                     setCompared(true)
                     if (!compareData) {
                       fetch("/api/contracts/compare")
@@ -4461,6 +4667,15 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 </Button>
               </div>
 
+              {contracts.length < 2 && (
+                <div className="compare-min-notice">
+                  <span>{t.compare_min_two_notice}</span>
+                  <Button variant="secondary" onClick={() => navigate("dashboard")}>
+                    {t.compare_go_dashboard}
+                  </Button>
+                </div>
+              )}
+
               {/* Dynamic Contract Selector Row */}
               {contracts.length > 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "20px" }}>
@@ -4471,17 +4686,10 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                     </label>
                     <select
                       style={{ width: "100%", padding: "9px 12px", borderRadius: "7px", border: "1px solid var(--border)", fontSize: "12px", fontWeight: 600, color: "var(--color-navy)", background: "white", outline: "none", cursor: "pointer" }}
-                      value={compareIdA || contracts[0]?.id}
+                      value={compareIdA || contracts[0]?.id || ""}
                       onChange={(e) => {
-                        const val = e.target.value
-                        setCompareIdA(val)
+                        setCompareIdA(e.target.value)
                         setCompared(true)
-                        const c = contracts.find((item) => String(item.id) === String(val))
-                        if (c) {
-                          const next = [...compareFiles]
-                          next[0] = c.name
-                          setCompareFiles(next)
-                        }
                       }}
                     >
                       {contracts.map((c) => (
@@ -4498,17 +4706,10 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                     </label>
                     <select
                       style={{ width: "100%", padding: "9px 12px", borderRadius: "7px", border: "1px solid var(--border)", fontSize: "12px", fontWeight: 600, color: "var(--color-navy)", background: "white", outline: "none", cursor: "pointer" }}
-                      value={compareIdB || (contracts[1]?.id || contracts[0]?.id)}
+                      value={compareIdB || (contracts[1]?.id || contracts[0]?.id || "")}
                       onChange={(e) => {
-                        const val = e.target.value
-                        setCompareIdB(val)
+                        setCompareIdB(e.target.value)
                         setCompared(true)
-                        const c = contracts.find((item) => String(item.id) === String(val))
-                        if (c) {
-                          const next = [...compareFiles]
-                          next[1] = c.name
-                          setCompareFiles(next)
-                        }
                       }}
                     >
                       {contracts.map((c) => (
@@ -4521,44 +4722,26 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 </div>
               )}
 
-              <div className="compare-upload-grid">
-                {[t.compare_doc_a, t.compare_doc_b].map((label, i) => (
-                  <label className="surface compare-upload" key={label}>
+              <div className="compare-summary-grid">
+                {[
+                  { label: t.compare_doc_a, tag: t.compare_orig_tag, doc: contractA, accent: "blue" },
+                  { label: t.compare_doc_b, tag: t.compare_revised_tag, doc: contractB, accent: "mint" },
+                ].map(({ label, tag, doc, accent }) => (
+                  <div className="surface compare-summary-card" key={label}>
                     <span className="compare-label">
                       {label}
-                      <span>{i ? t.compare_revised_tag : t.compare_orig_tag}</span>
+                      <span>{tag}</span>
                     </span>
-                    <span className={`file-icon ${i ? "mint" : "blue"}`}>
+                    <span className={`file-icon ${accent}`}>
                       <Icon name="file" size={23} />
                     </span>
-                    <b>
-                      {i === 0
-                        ? (contractA ? getContractName(contractA, lang) : compareFiles[0] || t.compare_choose_doc)
-                        : (contractB ? getContractName(contractB, lang) : compareFiles[1] || t.compare_choose_doc)}
-                    </b>
-                    <span className="text-link">
-                      {t.compare_or_upload_new}
-                      <Icon name="upload" size={14} />
-                    </span>
-                    <input
-                      type="file"
-                      className="sr-only"
-                      accept=".pdf,.docx,.jpg,.jpeg,.png"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0]
-                        if (f) {
-                          if (f.size > 20 * 1024 * 1024) {
-                            setToast(lang === "id" ? "Pilih file di bawah 20 MB." : "Please select a file smaller than 20 MB.")
-                            return
-                          }
-                          const next = [...compareFiles]
-                          next[i] = f.name
-                          setCompareFiles(next)
-                          setCompared(false)
-                        }
-                      }}
-                    />
-                  </label>
+                    <b>{doc ? getContractName(doc, lang) : t.compare_no_doc_selected}</b>
+                    {doc && (
+                      <span className="compare-summary-meta">
+                        {getContractType(lang === "id" ? (doc.typeId || doc.type) : doc.type, lang)} · {doc.clauses?.length || 0} {lang === "id" ? "klausul" : "clauses"} · {lang === "id" ? "Skor Risiko" : "Risk Score"} {doc.riskScore ?? 0}/100
+                      </span>
+                    )}
+                  </div>
                 ))}
               </div>
               {compared ? (
@@ -4753,13 +4936,14 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                                 onClick={() => {
                                   const target = contracts.find(
                                     (c) =>
+                                      (item.contractId && String(c.id) === String(item.contractId)) ||
                                       c.name === (item.contractName || item.contract) ||
-                                      c.nameId === (item.contractId || item.contract)
+                                      c.nameId === (item.contractNameId || item.contractName || item.contract)
                                   ) || contracts[0]
                                   if (target) openContract(target)
                                 }}
                               >
-                                {lang === "id" ? (item.contractId || item.contractName || item.contract) : (item.contractName || item.contract)}
+                                {lang === "id" ? (item.contractNameId || item.contractName || item.contract) : (item.contractName || item.contract)}
                                 <Icon name="external" size={12} />
                               </button>
                               <span>{lang === "id" ? (item.dateId || item.date) : item.date}</span>
@@ -4882,10 +5066,12 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                             JUN: 5, JUL: 6, AGU: 7, AUG: 7, SEP: 8, OKT: 9,
                             OCT: 9, NOV: 10, DES: 11, DEC: 11,
                           }
-                          const matchingDate = dates.find((d) => {
-                            const dMonth = monthMap[(d.month || "").toUpperCase()]
-                            return dMonth === dateMonth && parseInt(d.day, 10) === dayNum
-                          })
+                          const matchingDate = dates.length > 0
+                            ? dates.find((d) => {
+                                const dMonth = monthMap[(d.month || "").toUpperCase()]
+                                return dMonth === dateMonth && parseInt(d.day, 10) === dayNum
+                              })
+                            : undefined
                           const isToday = dateMonth === 10 && dayNum === 12
                           const monthName = lang === "id"
                             ? [
@@ -4929,10 +5115,12 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                         <i className="blue-bg" />
                         {lang === "id" ? "Hari Ini" : "Today"}
                       </span>
-                      <span>
-                        <i className="mint-bg" />
-                        {lang === "id" ? "Tenggat Kontrak" : "Contract milestone"}
-                      </span>
+                      {dates.length > 0 && (
+                        <span>
+                          <i className="mint-bg" />
+                          {lang === "id" ? "Tenggat Kontrak" : "Contract milestone"}
+                        </span>
+                      )}
                     </div>
                   </section>
                   <section className="reminder-tip">

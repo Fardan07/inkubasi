@@ -151,6 +151,7 @@ export const translations = {
     chat_suggested_4: "Apa saja tugas dan tanggung jawab utama saya?",
     chat_citation_based: "Berdasarkan",
     chat_citation_view: "Lihat sumber naskah",
+    chat_loading_status: "Sedang menelaah dokumen...",
     chat_disclaimer: "Jawaban berbasis AI dari naskah dokumen Anda. Selalu verifikasi dengan sumber pasal asli.",
 
     // Compare
@@ -334,7 +335,10 @@ export const translations = {
     compare_select_doc_a: "Pilih Dokumen A",
     compare_select_doc_b: "Pilih Dokumen B",
     compare_choose_existing: "Pilih dari Kontrak Saya...",
-    compare_or_upload_new: "Atau pilih/unggah file baru",
+    compare_no_doc_selected: "Belum ada dokumen dipilih",
+    compare_min_two_notice: "Unggah minimal 2 dokumen melalui Dasbor untuk membandingkan kontrak.",
+    compare_go_dashboard: "Ke Dasbor",
+    compare_same_doc_toast: "Pilih 2 dokumen yang berbeda untuk dibandingkan.",
 
     auth_err_name_required: "Nama lengkap wajib diisi.",
     auth_err_email_required: "Alamat email wajib diisi.",
@@ -608,6 +612,7 @@ export const translations = {
     chat_suggested_4: "What are my main responsibilities?",
     chat_citation_based: "Based on",
     chat_citation_view: "View source",
+    chat_loading_status: "Analyzing document...",
     chat_disclaimer: "AI-powered answers grounded in your document text. Always verify with the original clause source.",
 
     // Compare
@@ -791,7 +796,10 @@ export const translations = {
     compare_select_doc_a: "Select Document A",
     compare_select_doc_b: "Select Document B",
     compare_choose_existing: "Choose from My Contracts...",
-    compare_or_upload_new: "Or select/upload a new file",
+    compare_no_doc_selected: "No document selected",
+    compare_min_two_notice: "Upload at least 2 documents via the Dashboard to compare contracts.",
+    compare_go_dashboard: "Go to Dashboard",
+    compare_same_doc_toast: "Select 2 different documents to compare.",
 
     auth_err_name_required: "Full name is required.",
     auth_err_email_required: "Email address is required.",
