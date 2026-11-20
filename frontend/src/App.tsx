@@ -340,7 +340,104 @@ function SectionTitle({
   )
 }
 
+const SESSION_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000 // 24 Jam (86.400.000 ms)
+const LAST_ACTIVITY_KEY = "clariq_last_activity"
+
 type Page = "dashboard" | "contracts" | "builder" | "analysis" | "chat" | "compare" | "dates" | "settings" | "pricing" | "landing"
+
+function PageSkeleton({ variant }: { variant: Page }) {
+  if (variant === "dashboard") {
+    return (
+      <div className="page-skeleton-wrap" aria-busy="true" aria-label="Loading dashboard">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "grid", gap: 8, flex: 1 }}>
+            <div className="skeleton-line sm" style={{ width: 120 }} />
+            <div className="skeleton-line lg" style={{ width: 280 }} />
+            <div className="skeleton-line" style={{ width: 340 }} />
+          </div>
+          <div className="skeleton-block" style={{ width: 150, height: 42, borderRadius: 10 }} />
+        </div>
+        <div className="skeleton-block" style={{ height: 170, width: "100%" }} />
+        <div className="stats-grid">
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n} className="skeleton-block" style={{ height: 112 }} />
+          ))}
+        </div>
+        <div className="dashboard-columns">
+          <div className="skeleton-block" style={{ height: 320 }} />
+          <div className="skeleton-block" style={{ height: 320 }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (variant === "contracts") {
+    return (
+      <div className="page-skeleton-wrap" aria-busy="true" aria-label="Loading contracts">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "grid", gap: 8 }}>
+            <div className="skeleton-line sm" style={{ width: 110 }} />
+            <div className="skeleton-line lg" style={{ width: 240 }} />
+          </div>
+          <div className="skeleton-block" style={{ width: 150, height: 42, borderRadius: 10 }} />
+        </div>
+        <div className="skeleton-block" style={{ height: 68, width: "100%" }} />
+        <div className="skeleton-block" style={{ height: 52, width: "100%" }} />
+        <div style={{ display: "grid", gap: 12 }}>
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n} className="skeleton-block" style={{ height: 58, width: "100%" }} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (variant === "analysis") {
+    return (
+      <div className="page-skeleton-wrap" aria-busy="true" aria-label="Loading contract analysis">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "grid", gap: 8, flex: 1 }}>
+            <div className="skeleton-line sm" style={{ width: 140 }} />
+            <div className="skeleton-line lg" style={{ width: 360 }} />
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <div className="skeleton-block" style={{ width: 160, height: 42, borderRadius: 10 }} />
+            <div className="skeleton-block" style={{ width: 100, height: 42, borderRadius: 10 }} />
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 20 }}>
+          <div className="skeleton-block" style={{ height: 220 }} />
+          <div className="skeleton-block" style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div className="skeleton-circle" style={{ width: 120, height: 120 }} />
+          </div>
+        </div>
+        <div className="stats-grid">
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n} className="skeleton-block" style={{ height: 108 }} />
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }}>
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n} className="skeleton-block" style={{ height: 140 }} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="page-skeleton-wrap" aria-busy="true" aria-label="Loading page">
+      <div style={{ display: "grid", gap: 8 }}>
+        <div className="skeleton-line sm" style={{ width: 120 }} />
+        <div className="skeleton-line lg" style={{ width: 260 }} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20 }}>
+        <div className="skeleton-block" style={{ height: 260 }} />
+        <div className="skeleton-block" style={{ height: 260 }} />
+      </div>
+    </div>
+  )
+}
 type Clause = {
   id?: number
   title: string
@@ -815,6 +912,7 @@ export default function App() {
     role: string
     text: string
     source?: number | null
+    provider?: "GEMINI" | "CLARIQ"
   }[]>([])
   const [compareFiles, setCompareFiles] = useState<string[]>(["", ""])
   const [compared, setCompared] = useState(false)
@@ -913,8 +1011,34 @@ export default function App() {
   const notificationsRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
   const [contractToDelete, setContractToDelete] = useState<Contract | null>(null)
+  const [isAppLoading, setIsAppLoading] = useState<boolean>(false)
+  const [isPageLoading, setIsPageLoading] = useState<boolean>(false)
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false)
+  const pageLoadTimerRef = useRef<number | null>(null)
 
-  const loadUserData = (authToken?: string) => {
+  const handleSessionExpired = () => {
+    setToken("")
+    setName("")
+    setEmail("")
+    localStorage.removeItem("clariq_token")
+    localStorage.removeItem("clariq_name")
+    localStorage.removeItem("clariq_email")
+    localStorage.removeItem(LAST_ACTIVITY_KEY)
+    setContracts([])
+    setSelected(null)
+    setDates([])
+    setReminders([])
+    setCompareFiles(["", ""])
+    setCompared(false)
+    setProfile(false)
+    setMobileNav(false)
+    setPage("landing")
+    window.location.hash = "landing"
+    setAuthModal("login")
+    setToast(t.session_expired_toast)
+  }
+
+  const loadUserData = (authToken?: string, showSkeleton = false) => {
     const activeToken = authToken || localStorage.getItem("clariq_token") || token
     if (!activeToken) {
       setContracts([])
@@ -923,13 +1047,24 @@ export default function App() {
       setReminders([])
       setCompareFiles(["", ""])
       setCompared(false)
+      setIsAppLoading(false)
       return
+    }
+
+    if (showSkeleton) {
+      setIsAppLoading(true)
     }
 
     fetch("/api/contracts", {
       headers: { Authorization: `Bearer ${activeToken}` },
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.status === 401) {
+          handleSessionExpired()
+          throw new Error("SESSION_EXPIRED")
+        }
+        return res.json()
+      })
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
           const enriched = json.data.map((c: any) => ({
@@ -952,11 +1087,20 @@ export default function App() {
         setContracts([])
         setSelected(null)
       })
+      .finally(() => {
+        setIsAppLoading(false)
+      })
 
     fetch("/api/dates", {
       headers: { Authorization: `Bearer ${activeToken}` },
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.status === 401) {
+          handleSessionExpired()
+          throw new Error("SESSION_EXPIRED")
+        }
+        return res.json()
+      })
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
           setDates(json.data)
@@ -1030,6 +1174,7 @@ export default function App() {
 
       setToken(data.token)
       localStorage.setItem("clariq_token", data.token)
+      localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
       if (data.user?.name) {
         setName(data.user.name)
         localStorage.setItem("clariq_name", data.user.name)
@@ -1054,7 +1199,7 @@ export default function App() {
       setAuthEmail("")
       setAuthPassword("")
       setAuthName("")
-      loadUserData(data.token)
+      loadUserData(data.token, true)
       setToast(data.message || (lang === "id" ? "Selamat datang di Cek Kontrak!" : "Welcome to Cek Kontrak!"))
       navigate("dashboard")
     } catch {
@@ -1073,6 +1218,10 @@ export default function App() {
           ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
         },
       })
+      if (res.status === 401) {
+        handleSessionExpired()
+        return
+      }
       const data = await res.json()
       if (!res.ok || !data.success) {
         setToast(data.message || (lang === "id" ? "Gagal menghapus kontrak." : "Failed to delete contract."))
@@ -1101,6 +1250,7 @@ export default function App() {
     localStorage.removeItem("clariq_token")
     localStorage.removeItem("clariq_name")
     localStorage.removeItem("clariq_email")
+    localStorage.removeItem(LAST_ACTIVITY_KEY)
     setContracts([])
     setSelected(null)
     setDates([])
@@ -1130,11 +1280,25 @@ export default function App() {
       setSelected(null)
       setDates([])
     } else {
-      loadUserData(savedToken)
+      const lastActivity = localStorage.getItem(LAST_ACTIVITY_KEY)
+      if (lastActivity && Date.now() - Number(lastActivity) >= SESSION_IDLE_TIMEOUT_MS) {
+        handleSessionExpired()
+        return
+      }
+      if (!lastActivity) {
+        localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
+      }
+      loadUserData(savedToken, true)
       fetch("/api/auth/me", {
         headers: { Authorization: `Bearer ${savedToken}` },
       })
-        .then((res) => res.json())
+        .then((res) => {
+          if (res.status === 401) {
+            handleSessionExpired()
+            throw new Error("SESSION_EXPIRED")
+          }
+          return res.json()
+        })
         .then((json) => {
           if (json.success && json.user) {
             if (json.user.name) {
@@ -1165,6 +1329,71 @@ export default function App() {
         .catch(() => {})
     }
   }, [token])
+
+  // 24-Hour Idle Session Timeout Tracker (Throttled Activity + Periodic Check + VisibilityChange)
+  useEffect(() => {
+    const activeToken = localStorage.getItem("clariq_token") || token
+    if (!activeToken) return
+
+    let lastWrite = 0
+    const recordActivity = () => {
+      const currentToken = localStorage.getItem("clariq_token")
+      if (!currentToken) return
+      const now = Date.now()
+      const stored = localStorage.getItem(LAST_ACTIVITY_KEY)
+      if (stored && now - Number(stored) >= SESSION_IDLE_TIMEOUT_MS) {
+        handleSessionExpired()
+        return
+      }
+      if (now - lastWrite >= 30000) {
+        lastWrite = now
+        localStorage.setItem(LAST_ACTIVITY_KEY, String(now))
+      }
+    }
+
+    const checkIdleExpiry = () => {
+      const currentToken = localStorage.getItem("clariq_token")
+      if (!currentToken) return
+      const stored = localStorage.getItem(LAST_ACTIVITY_KEY)
+      if (stored && Date.now() - Number(stored) >= SESSION_IDLE_TIMEOUT_MS) {
+        handleSessionExpired()
+      }
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkIdleExpiry()
+      }
+    }
+
+    const events: (keyof WindowEventMap)[] = ["mousedown", "keydown", "scroll", "touchstart", "click"]
+    events.forEach((evt) => window.addEventListener(evt, recordActivity, { passive: true }))
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    const intervalId = window.setInterval(checkIdleExpiry, 60000)
+
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, recordActivity))
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      window.clearInterval(intervalId)
+    }
+  }, [token, lang])
+
+  const triggerPageSkeleton = (targetPage: Page) => {
+    const skeletonPages: Page[] = ["dashboard", "contracts", "analysis", "compare", "dates"]
+    if (!skeletonPages.includes(targetPage)) {
+      setIsPageLoading(false)
+      return
+    }
+    if (pageLoadTimerRef.current) {
+      window.clearTimeout(pageLoadTimerRef.current)
+    }
+    setIsPageLoading(true)
+    pageLoadTimerRef.current = window.setTimeout(() => {
+      setIsPageLoading(false)
+      pageLoadTimerRef.current = null
+    }, 250)
+  }
+
   const navigate = (next: Page) => {
     const isPublic = next === "landing" || next === "pricing"
     const savedToken = localStorage.getItem("clariq_token") || token
@@ -1182,6 +1411,9 @@ export default function App() {
       setProfile(false)
       setSearch("")
       return
+    }
+    if (next !== page) {
+      triggerPageSkeleton(next)
     }
     setPage(next)
     window.location.hash = next
@@ -1345,11 +1577,11 @@ export default function App() {
   }
   const selectFile = (file?: File) => {
     if (!file) return
-    if (!/\.(pdf|docx|txt|jpg|jpeg|png)$/i.test(file.name)) {
+    if (!/\.(pdf|docx|txt|jpg|jpeg|png|webp)$/i.test(file.name)) {
       setUploadError(
         lang === "id"
-          ? "Silakan pilih dokumen dengan format PDF, DOCX, TXT, JPG, atau PNG."
-          : "Please choose a PDF, DOCX, TXT, JPG, or PNG document."
+          ? "Silakan pilih dokumen dengan format PDF, DOCX, TXT, JPG, PNG, atau WEBP."
+          : "Please choose a PDF, DOCX, TXT, JPG, PNG, or WEBP document."
       )
       return
     }
@@ -1381,7 +1613,7 @@ export default function App() {
         setUploadText(content)
       }
       reader.readAsText(file)
-    } else if (/\.pdf$/i.test(file.name)) {
+    } else if (/\.(pdf|jpe?g|png|webp)$/i.test(file.name)) {
       const reader = new FileReader()
       reader.onload = async () => {
         try {
@@ -1389,7 +1621,11 @@ export default function App() {
           const res = await fetch("/api/extract-pdf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ base64, fileName: file.name }),
+            body: JSON.stringify({
+              base64,
+              fileName: file.name,
+              mimeType: file.type || undefined,
+            }),
           })
           const json = await res.json()
           setExtractingPdf(false)
@@ -1408,8 +1644,8 @@ export default function App() {
           setExtractingPdf(false)
           setUploadError(
             lang === "id"
-              ? "Gagal mengekstrak PDF. Silakan coba lagi atau gunakan mode tempel teks."
-              : "Failed to extract PDF. Please retry or paste text."
+              ? "Gagal mengekstrak dokumen. Silakan coba lagi atau gunakan mode tempel teks."
+              : "Failed to extract document. Please retry or paste text."
           )
         }
       }
@@ -1421,14 +1657,6 @@ export default function App() {
         lang === "id"
           ? "Dokumen Word (.docx) terdeteksi. Silakan salin isi pasal kontrak Anda ke kolom di bawah ini untuk analisis AI langsung."
           : "Word document (.docx) detected. Please copy your contract clauses into the text box below for direct AI analysis."
-      )
-    } else if (/\.(jpe?g|png)$/i.test(file.name)) {
-      setExtractingPdf(false)
-      setUploadMode("paste")
-      setUploadError(
-        lang === "id"
-          ? "Dokumen foto/scan belum mendukung ekstraksi teks otomatis. Silakan gunakan PDF berbasis teks atau salin isi kontrak ke tab ini."
-          : "Image/photo scan does not support auto-extraction. Please use a text-based PDF or paste contract text into this tab."
       )
     } else {
       setExtractingPdf(false)
@@ -1479,6 +1707,7 @@ export default function App() {
       ? uploadFile.name.replace(/\.[^.]+$/, "")
       : defaultTitle
 
+    setIsAnalyzing(true)
     try {
       const res = await fetch("/api/contracts", {
         method: "POST",
@@ -1495,6 +1724,11 @@ export default function App() {
           lang,
         }),
       })
+      if (res.status === 401) {
+        setIsAnalyzing(false)
+        handleSessionExpired()
+        return
+      }
       const json = await res.json()
       if (res.ok && json.success && json.data) {
         setContracts((prev) => [json.data, ...prev])
@@ -1506,6 +1740,7 @@ export default function App() {
         setUploadText("")
         setExtractedData(null)
         setUploadOpen(false)
+        setIsAnalyzing(false)
         navigate("analysis")
         setToast(
           lang === "id"
@@ -1515,6 +1750,7 @@ export default function App() {
         loadUserData(token)
         return
       } else {
+        setIsAnalyzing(false)
         setUploadError(
           json.message ||
             (lang === "id" ? "Gagal menganalisis dokumen." : "Failed to analyze document.")
@@ -1522,6 +1758,7 @@ export default function App() {
         return
       }
     } catch {
+      setIsAnalyzing(false)
       setUploadError(
         lang === "id"
           ? "Terjadi kesalahan jaringan atau server tidak dapat dihubungi. Silakan coba beberapa saat lagi."
@@ -1548,8 +1785,13 @@ export default function App() {
           question: text,
           contractId: selected?.id || 1,
           lang,
+          history: messages.slice(-6),
         }),
       })
+      if (res.status === 401) {
+        handleSessionExpired()
+        return
+      }
       if (res.ok) {
         const json = await res.json()
         if (json.success && json.data) {
@@ -1559,6 +1801,7 @@ export default function App() {
               role: "assistant",
               text: json.data.text,
               source: json.data.source ?? null,
+              provider: json.data.provider === "GEMINI" ? "GEMINI" : "CLARIQ",
             },
           ])
           return
@@ -2488,6 +2731,10 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
           </header>
         )}
         <main key={page} className={`${isLanding ? "landing-content" : "page-content"} page-enter`}>
+          {(isAppLoading || isPageLoading || isAnalyzing) &&
+            (["dashboard", "contracts", "analysis", "compare", "dates"] as Page[]).includes(page) && (
+              <PageSkeleton variant={page} />
+            )}
           {page === "dashboard" && (
             <>
               <div className="page-heading">
@@ -3407,6 +3654,17 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
 
                     <div className="legal-document-desk preview-scroll-area">
                       <article className="legal-document-paper contract-paper" aria-label="Live Preview Surat Kontrak Kerja">
+                        <table className="print-doc-table">
+                          <thead className="print-only-spacer">
+                            <tr>
+                              <td>
+                                <div className="print-top-margin" />
+                              </td>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td className="print-doc-body-cell">
                         {/* 1. KOP SURAT PERUSAHAAN RESMI (OFFICIAL CORPORATE LETTERHEAD) */}
                         <header className="legal-doc-letterhead">
                           <div className="letterhead-logo-badge" aria-hidden="true">
@@ -3574,7 +3832,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                         </div>
 
                         {/* 5. BLOK PENUTUP & TANDA TANGAN ANTI-TERPOTONG (break-inside: avoid) */}
-                        <div className="signature-block legal-doc-closing-block">
+                        <div className="signature-block legal-doc-closing-block contract-closing-and-signatures">
                           <p className="legal-doc-closing-text">
                             Demikian surat perjanjian kerja ini dibuat secara sadar, tanpa paksaan dari pihak manapun, dalam rangkap 2 (dua) bermeterai cukup yang masing-masing memiliki kekuatan hukum yang sama.
                           </p>
@@ -3613,11 +3871,11 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                               <p className="signature-party-sub">Pekerja / Karyawan</p>
                               <div className="signature-stage sig-visual-area">
                                 {showEmeterai && (
-                                  <div className="emeterai-seal-box" aria-label="E-Meterai Rp10.000">
-                                    <span className="emeterai-top">E-METERAI RI</span>
-                                    <strong className="emeterai-nominal">Rp10.000</strong>
-                                    <span className="emeterai-serial">EMX-92841029</span>
-                                  </div>
+                                  <img
+                                    src="/meterai-10000.png"
+                                    alt="Meterai Rp10.000"
+                                    className="emeterai-seal-img"
+                                  />
                                 )}
                                 {hrdEmpSig ? (
                                   <img
@@ -3636,6 +3894,17 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                             </div>
                           </div>
                         </div>
+                              </td>
+                            </tr>
+                          </tbody>
+                          <tfoot className="print-only-spacer">
+                            <tr>
+                              <td>
+                                <div className="print-bottom-margin" />
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
                       </article>
                     </div>
                   </div>
@@ -4073,7 +4342,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                               ? "AI Cek Kontrak"
                               : name.split(" ")[0]}
                             {m.role === "assistant" && (
-                              <small>{lang === "id" ? "AI · SIMULASI" : "AI · SAMPLE"}</small>
+                              <small>{m.provider === "GEMINI" ? "AI · GEMINI" : "AI · CLARIQ"}</small>
                             )}
                           </span>
                           <p>{m.text}</p>
@@ -5333,12 +5602,6 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 {uploadError}
               </p>
             )}
-            <div className="upload-demo-note">
-              <Icon name="spark" size={16} />
-              <p>
-                <b>{lang === "id" ? "Grounding Hukum AI." : "AI Legal Grounding."}</b> {lang === "id" ? "Dianalisis otomatis berbasis UU Ketenagakerjaan & KUHPerdata Indonesia." : "Automatically analyzed grounded in Indonesian Manpower Law & Civil Code."}
-              </p>
-            </div>
             <Button
               icon="spark"
               className="full-width"

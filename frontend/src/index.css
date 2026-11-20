@@ -375,19 +375,27 @@ table { border-collapse: collapse; width: 100%; text-align: left; }
 .upload-modal {
   width: 100%;
   max-width: 560px;
-  padding: 28px;
-  box-sizing: border-box;
+  padding: 28px 28px 24px;
+  max-height: 92vh;
+  overflow-y: auto;
   overflow-x: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 .upload-modal * {
   box-sizing: border-box;
+}
+.upload-modal > * {
+  flex-shrink: 0;
 }
 .modal-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
   width: 100%;
+  flex-shrink: 0;
 }
 .modal-heading .stat-icon {
   width: 43px;
@@ -400,12 +408,14 @@ table { border-collapse: collapse; width: 100%; text-align: left; }
   letter-spacing: -.6px;
   overflow-wrap: break-word;
   word-break: break-word;
+  margin: 0;
 }
 .modal > p, .modal-subtitle {
-  font-size: 11px;
+  font-size: 11.5px;
   color: #93a1b5;
-  line-height: 1.8;
-  margin-top: 8px;
+  line-height: 1.65;
+  margin-top: 6px;
+  margin-bottom: 0;
   overflow-wrap: break-word;
   word-break: break-word;
 }
@@ -416,42 +426,51 @@ table { border-collapse: collapse; width: 100%; text-align: left; }
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  height: auto !important;
+  min-height: 150px;
+  max-height: none !important;
+  overflow: visible !important;
+  flex-shrink: 0 !important;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 28px 15px;
-  margin: 18px 0 16px;
+  justify-content: center;
+  gap: 6px;
+  padding: 22px 20px;
+  margin-top: 4px;
+  margin-bottom: 14px;
   text-align: center;
-  overflow: hidden;
 }
 .drop-zone:hover, .drop-zone.dragging { border-color: var(--color-clarity); background: #edf4ff; }
-.drop-zone h3 { font-size: 13px; font-weight: 600; margin: 15px 0 9px; overflow-wrap: anywhere; max-width: 100%; }
-.drop-zone p { font-size: 10px; color: #97a5b9; }
+.drop-zone h3 { font-size: 13px; font-weight: 600; margin: 12px 0 6px; overflow-wrap: anywhere; max-width: 100%; }
+.drop-zone p { font-size: 10.5px; color: #97a5b9; margin: 0; }
 .drop-zone p b { font-weight: 500; color: #4b8beb; }
-.drop-zone small { font-size: 9px; color: #adb7c5; margin-top: 15px; }
+.drop-zone small { font-size: 9.5px; color: #adb7c5; margin-top: 10px; }
 .upload-demo-note {
   display: flex;
-  gap: 9px;
+  gap: 10px;
   align-items: flex-start;
   background: #f1f6fe;
   border: 1px solid #e5edf9;
-  border-radius: 7px;
-  padding: 12px;
-  color: #849cc0;
-  margin-bottom: 18px;
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #6b85ad;
+  margin-top: 0;
+  margin-bottom: 14px;
+  line-height: 1.45;
   max-width: 100%;
   box-sizing: border-box;
 }
-.upload-demo-note p { font-size: 9px; line-height: 1.8; }
+.upload-demo-note p { font-size: 10.5px; line-height: 1.45; margin: 0; }
 .upload-demo-note svg { margin-top: 2px; flex-shrink: 0; }
 .modal-legal {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-size: 8px;
+  font-size: 9px;
   color: #a4afbe;
-  margin-top: 15px;
+  margin-top: 14px;
   text-align: center;
   flex-wrap: wrap;
   max-width: 100%;
@@ -1520,15 +1539,16 @@ html, body {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 10px 14px;
+  padding: 11px 14px;
   background: #f0fdf4;
   border: 1.5px dashed #22c55e;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #15803d;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  margin-top: 10px;
+  margin-top: 0;
+  margin-bottom: 14px;
   transition: all 0.2s ease;
 }
 .demo-case-btn:hover {
@@ -2355,20 +2375,21 @@ html, body {
 }
 
 .sig-rendered-img {
+  position: relative;
+  z-index: 3;
+  mix-blend-mode: multiply;
   max-width: 165px;
-  max-height: 70px;
+  max-height: 68px;
   width: auto;
   height: auto;
   object-fit: contain;
-  position: relative;
-  z-index: 3;
   pointer-events: none;
   box-sizing: border-box;
 }
 
 .sig-rendered-img.with-emeterai {
-  padding-left: 28px;
-  max-width: 175px;
+  padding-left: 16px;
+  max-width: 165px;
 }
 
 .sig-placeholder-line {
@@ -2380,7 +2401,7 @@ html, body {
 }
 
 .sig-placeholder-line.with-emeterai {
-  padding-left: 32px;
+  padding-left: 24px;
 }
 
 /* Official Corporate Stamp Overlay (Shifted Left, Never Hits Header/Footer) */
@@ -2431,7 +2452,22 @@ html, body {
   margin-top: 2px;
 }
 
-/* Visual E-Meterai Rp10.000 (Peruri Style — Left Side of Signature Stage) */
+/* Authentic Meterai Rp10.000 Image Behind Signature Layer */
+.emeterai-seal-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-55%, -50%);
+  width: 84px;
+  height: auto;
+  object-fit: contain;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.96;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 .emeterai-seal-box {
   position: absolute;
   left: 6px;
@@ -2452,6 +2488,71 @@ html, body {
   padding: 5px 4px;
   box-shadow: 0 1px 4px rgba(157, 23, 77, 0.14);
   pointer-events: none;
+}
+
+/* Screen Print Table Wrapper (Zero Visual Impact on Screen) */
+.print-only-spacer {
+  display: none;
+}
+.print-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.print-doc-body-cell {
+  padding: 0;
+  border: none;
+}
+.contract-closing-and-signatures {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+/* ============================================================ */
+/* SKELETON LOADING SHIMMER SYSTEM                              */
+/* ============================================================ */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-block,
+.skeleton-line,
+.skeleton-circle {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.45s ease-in-out infinite;
+  display: block;
+}
+
+.skeleton-block {
+  border-radius: 10px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+}
+
+.skeleton-circle {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.page-skeleton-wrap {
+  width: 100%;
+  animation: pageEnter 0.22s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block,
+  .skeleton-line,
+  .skeleton-circle {
+    animation: none !important;
+  }
 }
 
 .emeterai-top {
@@ -2588,7 +2689,7 @@ html, body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 14mm 18mm;
+    margin: 0 !important;
   }
   html, body {
     background: #ffffff !important;
@@ -2603,7 +2704,11 @@ html, body {
   .hrd-form-card,
   .legal-document-toolbar,
   .toast-wrapper,
-  .modal-backdrop {
+  .modal-backdrop,
+  .page-skeleton-wrap,
+  .skeleton-block,
+  .skeleton-line,
+  .skeleton-circle {
     display: none !important;
   }
   .app,
@@ -2640,6 +2745,26 @@ html, body {
     line-height: 1.42 !important;
     color: #000000 !important;
   }
+  .print-doc-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  thead.print-only-spacer {
+    display: table-header-group !important;
+  }
+  tfoot.print-only-spacer {
+    display: table-footer-group !important;
+  }
+  .print-top-margin {
+    height: 20mm !important;
+  }
+  .print-bottom-margin {
+    height: 18mm !important;
+  }
+  .print-doc-body-cell {
+    padding: 0 22mm !important;
+    border: none !important;
+  }
   .legal-doc-letterhead {
     padding-bottom: 8px !important;
     margin-bottom: 12px !important;
@@ -2669,6 +2794,7 @@ html, body {
   .legal-doc-article p {
     margin: 0 0 3px !important;
   }
+  .contract-closing-and-signatures,
   .signature-block,
   .legal-doc-closing-block,
   .signature-grid,
@@ -2683,6 +2809,7 @@ html, body {
     margin: 4px auto !important;
   }
   .corporate-stamp-seal,
+  .emeterai-seal-img,
   .emeterai-seal-box {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;

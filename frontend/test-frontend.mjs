@@ -135,9 +135,9 @@ assert(
 );
 assert(
   appRaw.includes('corporate-stamp-seal') &&
-    appRaw.includes('emeterai-seal-box') &&
-    appRaw.includes('Rp10.000'),
-  'Corporate Stamp overlay (.corporate-stamp-seal) and E-Meterai Rp10.000 (.emeterai-seal-box) are implemented'
+    appRaw.includes('emeterai-seal-img') &&
+    appRaw.includes('src="/meterai-10000.png"'),
+  'Corporate Stamp overlay (.corporate-stamp-seal) and authentic Meterai Rp10.000 image (.emeterai-seal-img) are implemented'
 );
 assert(
   cssRaw.includes('@media print') &&
@@ -220,6 +220,66 @@ assert(
 assert(
   appRaw.includes('/api/subscription/upgrade') && appRaw.includes('/api/subscription/reset'),
   'Subscription upgrade (/api/subscription/upgrade) and reset (/api/subscription/reset) endpoints are wired in App.tsx'
+);
+
+// 3g. Sprint Final Polish: Ticket 1 (Meterai Image & Formal PDF Print Table), Ticket 2 (24h Idle Auto-Logout), Ticket 3 (Skeleton Shimmer)
+const meteraiPublicFile = path.join(__dirname, 'public', 'meterai-10000.png');
+assert(
+  fs.existsSync(meteraiPublicFile) &&
+    appRaw.includes('src="/meterai-10000.png"') &&
+    appRaw.includes('className="emeterai-seal-img"') &&
+    cssRaw.includes('.emeterai-seal-img') &&
+    cssRaw.includes('mix-blend-mode: multiply'),
+  'Ticket 1.1: Authentic Meterai Rp10.000 image (/meterai-10000.png) is layered under signature with mix-blend-mode: multiply'
+);
+assert(
+  appRaw.includes('className="print-doc-table"') &&
+    appRaw.includes('className="print-top-margin"') &&
+    appRaw.includes('className="print-bottom-margin"') &&
+    appRaw.includes('contract-closing-and-signatures') &&
+    cssRaw.includes('margin: 0 !important') &&
+    cssRaw.includes('display: table-header-group !important') &&
+    cssRaw.includes('display: table-footer-group !important'),
+  'Ticket 1.2: Formal A4 print layout (.print-doc-table with thead/tfoot margin spacers and @page margin: 0) is implemented'
+);
+assert(
+  appRaw.includes('SESSION_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000') &&
+    appRaw.includes('LAST_ACTIVITY_KEY = "clariq_last_activity"') &&
+    appRaw.includes('handleSessionExpired') &&
+    appRaw.includes('visibilitychange') &&
+    'session_expired_toast' in translations.id &&
+    'session_expired_toast' in translations.en,
+  'Ticket 2: 24-hour inactivity auto-logout (SESSION_IDLE_TIMEOUT_MS, LAST_ACTIVITY_KEY, visibilitychange, handleSessionExpired) is implemented'
+);
+assert(
+  appRaw.includes('function PageSkeleton') &&
+    appRaw.includes('<PageSkeleton variant={page} />') &&
+    cssRaw.includes('@keyframes skeleton-shimmer') &&
+    cssRaw.includes('.skeleton-block') &&
+    cssRaw.includes('.skeleton-line') &&
+    cssRaw.includes('.skeleton-circle'),
+  'Ticket 3: Shimmer Skeleton Loading system (PageSkeleton component and @keyframes skeleton-shimmer) is implemented'
+);
+
+// 3h. Hybrid Gemini Chat Badge, Updated Chat Disclaimer, & Upload Modal Spacing Polish
+assert(
+  appRaw.includes('"AI · GEMINI"') &&
+    appRaw.includes('"AI · CLARIQ"') &&
+    !appRaw.includes('"AI · SIMULASI"'),
+  'Chat badge dynamically displays "AI · GEMINI" or "AI · CLARIQ" (replaced "AI · SIMULASI")'
+);
+assert(
+  translations.id.chat_disclaimer ===
+    'Jawaban berbasis AI dari naskah dokumen Anda. Selalu verifikasi dengan sumber pasal asli.' &&
+    translations.en.chat_disclaimer.includes('AI-powered answers grounded in your document text'),
+  'Chat disclaimer in i18n.ts is updated for both ID and EN'
+);
+assert(
+  cssRaw.includes('max-height: 92vh') &&
+    cssRaw.includes('padding: 22px 20px') &&
+    cssRaw.includes('min-height: 150px') &&
+    cssRaw.includes('overflow: visible !important'),
+  'Upload modal spacing & non-clipping .drop-zone (.upload-modal > * flex-shrink: 0, min-height: 150px, overflow: visible) are polished'
 );
 
 console.log('\n--- FRONTEND INTEGRITY SUMMARY ---');

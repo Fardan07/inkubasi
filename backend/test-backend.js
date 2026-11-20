@@ -1,6 +1,14 @@
 import fs from 'fs';
+import 'dotenv/config';
+import jwt from 'jsonwebtoken';
+import {
+  getGeminiApiKeys,
+  callGeminiApi,
+  chatWithAnalyzedContract,
+} from './src/contractAnalyzer.js';
 
 const BASE_URL = 'http://localhost:5000';
+const JWT_SECRET = process.env.JWT_SECRET || 'clariq-dev-secret-key-2027';
 
 async function runTests() {
   const results = [];
@@ -1193,6 +1201,182 @@ Pihak Pertama (Nana Pertiwi) & Pihak Kedua (Kevin Birowo)`;
     }
   } catch (err) {
     assert(false, `Sequential Doc 1 -> Doc 2 test failed: ${err.message}`);
+  }
+
+  // 33. JWT 24-Hour Expiry & Expired Session Auto-Logout Guardrail (SESSION_EXPIRED)
+  try {
+    const decoded = jwt.decode(token);
+    assert(
+      decoded && typeof decoded.exp === 'number' && typeof decoded.iat === 'number' && decoded.exp - decoded.iat === 86400,
+      `Login JWT payload has 24-hour TTL (exp - iat === 86400, got: ${decoded ? decoded.exp - decoded.iat : 'null'})`
+    );
+
+    const expiredToken = jwt.sign(
+      { id: 1, name: 'Test Expired', email: 'expired@clariq.id', plan: 'Free' },
+      JWT_SECRET,
+      { expiresIn: '-10s' }
+    );
+    const expRes = await fetch(`${BASE_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${expiredToken}` },
+    });
+    const expData = await expRes.json();
+    assert(expRes.status === 401, `Expired JWT to GET /api/auth/me returns 401 (got ${expRes.status})`);
+    assert(
+      expData.code === 'SESSION_EXPIRED' && /Sesi telah berakhir/i.test(expData.error || ''),
+      `Expired JWT response returns code: "SESSION_EXPIRED" and Indonesian expiry message`
+    );
+  } catch (err) {
+    assert(false, `JWT 24-hour expiry test failed: ${err.message}`);
+  }
+
+  // 34. Hybrid Multi-Key Gemini Client, Bug Fixes ("jam kerjanya", "pdf ... dendanya", "orang awam"), & Silent Local Fallback
+  try {
+    const keys = getGeminiApiKeys();
+    assert(keys.length >= 1, `Multi-key rotation loader detected ${keys.length} unique Gemini API key(s)`);
+
+    const liveGem = await callGeminiApi({
+      contents: ['Balas satu kata saja tanpa tanda baca: SIAP'],
+      timeoutMs: 8000,
+    });
+    assert(
+      liveGem.ok === true && liveGem.status === 200,
+      `Live callGeminiApi succeeds with HTTP 200 (model: ${liveGem.model}, keyIndex: ${liveGem.keyIndex})`
+    );
+
+    // Create test contract with --- HALAMAN 1 --- and --- HALAMAN 2 --- markers
+    const pagedKevinText = `--- HALAMAN 1 ---\n${kevinContractText.replace('Pasal 4', '--- HALAMAN 2 ---\nPasal 4')}`;
+    const cRes = await fetch(`${BASE_URL}/api/contracts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: 'Kontrak_Kevin_MultiPage',
+        fileName: 'Kontrak_Kevin_MultiPage.pdf',
+        contractType: 'kerja',
+        contractText: pagedKevinText,
+        useAICheck: true,
+        lang: 'id',
+      }),
+    });
+    const cJson = await cRes.json();
+    const pagedContract = cJson.data;
+    assert(cRes.status === 201 && pagedContract?.id, 'Multi-page Kevin contract created (201)');
+
+    // 34a. "Bagaimana aturan jam kerjanya?" -> Must answer working hours (NOT rejected!)
+    const qJamRes = await fetch(`${BASE_URL}/api/contracts/${pagedContract.id}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question: 'Bagaimana aturan jam kerjanya?',
+        lang: 'id',
+      }),
+    });
+    const qJamData = await qJamRes.json();
+    assert(qJamRes.status === 200, 'Chat "Bagaimana aturan jam kerjanya?" returns 200');
+    assert(
+      !qJamData.data.text.includes('Maaf, saya tidak paham') &&
+        (/09\.00|17\.00|40\s*jam|Senin/i.test(qJamData.data.text)) &&
+        /Pasal\s*77/i.test(qJamData.data.text),
+      'Chat "Bagaimana aturan jam kerjanya?" answers working hours & Pasal 77 accurately'
+    );
+
+    // 34b. "di halaman berapa pdf mencantumkan jumlah dendanya" -> Must answer penalty + page/article, NOT 4 platform features, and source points to penalty clause (NOT Pasal 77)
+    const qPdfDendaRes = await fetch(`${BASE_URL}/api/contracts/${pagedContract.id}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question: 'di halaman berapa pdf mencantumkan jumlah dendanya',
+        lang: 'id',
+      }),
+    });
+    const qPdfDendaData = await qPdfDendaRes.json();
+    assert(qPdfDendaRes.status === 200, 'Chat "di halaman berapa pdf mencantumkan jumlah dendanya" returns 200');
+    assert(
+      !qPdfDendaData.data.text.includes('4 fitur utama') &&
+        qPdfDendaData.data.text.includes('10.000.000') &&
+        /Halaman\s*2/i.test(qPdfDendaData.data.text) &&
+        /Pasal\s*4/i.test(qPdfDendaData.data.text),
+      'Chat "di halaman berapa pdf mencantumkan jumlah dendanya" cites Rp10.000.000 on Halaman 2 (Pasal 4) and is NOT hijacked by platform features'
+    );
+    const citedClause = pagedContract.clauses?.[qPdfDendaData.data.source];
+    assert(
+      qPdfDendaData.data.source !== null &&
+        citedClause &&
+        !/Pasal\s*77/i.test(`${citedClause.source || ''} ${citedClause.sourceId || ''}`) &&
+        /denda|10\.000\.000|Pasal\s*36|Putusan\s*MK/i.test(
+          `${citedClause.text || ''} ${citedClause.meaning || ''} ${citedClause.source || ''}`
+        ),
+      `Penalty query citation source (${qPdfDendaData.data.source}) points to the Penalty clause, NOT Pasal 77`
+    );
+
+    // 34c. "ini surat apa? jelasin isinya secara singkat buat orang awam" -> Must summarize contract in plain language
+    const qAwamRes = await fetch(`${BASE_URL}/api/contracts/${pagedContract.id}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question: 'ini surat apa? jelasin isinya secara singkat buat orang awam',
+        lang: 'id',
+      }),
+    });
+    const qAwamData = await qAwamRes.json();
+    assert(qAwamRes.status === 200, 'Chat "ini surat apa? jelasin isinya secara singkat buat orang awam" returns 200');
+    assert(
+      !qAwamData.data.text.includes('Maaf, saya tidak paham') &&
+        /Nana Pertiwi|Kevin Birowo|Bintang Maju Bersama/i.test(qAwamData.data.text) &&
+        /8\.000\.000|10\.000\.000/i.test(qAwamData.data.text),
+      'Layman summary query clearly explains the contract parties, compensation, and key risks'
+    );
+
+    // 34d. Verify Direct Silent Local Fallback (chatWithAnalyzedContract) 100% offline accuracy
+    const localJam = chatWithAnalyzedContract({
+      contract: pagedContract,
+      question: 'Bagaimana aturan jam kerjanya?',
+      lang: 'id',
+    });
+    const localDendaPage = chatWithAnalyzedContract({
+      contract: pagedContract,
+      question: 'di halaman berapa pdf mencantumkan jumlah dendanya',
+      lang: 'id',
+    });
+    const localAwam = chatWithAnalyzedContract({
+      contract: pagedContract,
+      question: 'ini surat apa? jelasin isinya secara singkat buat orang awam',
+      lang: 'id',
+    });
+    const localOos = chatWithAnalyzedContract({
+      contract: pagedContract,
+      question: 'siapa jokowi?',
+      lang: 'id',
+    });
+    assert(
+      localJam.text.includes('Pasal 77') &&
+        localDendaPage.text.includes('10.000.000') &&
+        /Halaman\s*2/i.test(localDendaPage.text) &&
+        localDendaPage.source === 0 &&
+        /Kevin Birowo/i.test(localAwam.text) &&
+        localOos.source === null &&
+        localOos.text.includes('Maaf, saya tidak paham maksud Anda'),
+      'Silent Local Fallback (chatWithAnalyzedContract) passes all 4 new test cases 100% offline'
+    );
+
+    // Cleanup
+    await fetch(`${BASE_URL}/api/contracts/${pagedContract.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err) {
+    assert(false, `Hybrid Gemini & Chatbot fixes test failed: ${err.message}`);
   }
 
   console.log('\n--- TEST RESULTS SUMMARY ---');
