@@ -261,6 +261,27 @@ assert(
   'Ticket 3: Shimmer Skeleton Loading system (PageSkeleton component and @keyframes skeleton-shimmer) is implemented'
 );
 
+// 3h. Hybrid Gemini Chat Badge, Updated Chat Disclaimer, & Upload Modal Spacing Polish
+assert(
+  appRaw.includes('"AI · GEMINI"') &&
+    appRaw.includes('"AI · CLARIQ"') &&
+    !appRaw.includes('"AI · SIMULASI"'),
+  'Chat badge dynamically displays "AI · GEMINI" or "AI · CLARIQ" (replaced "AI · SIMULASI")'
+);
+assert(
+  translations.id.chat_disclaimer ===
+    'Jawaban berbasis AI dari naskah dokumen Anda. Selalu verifikasi dengan sumber pasal asli.' &&
+    translations.en.chat_disclaimer.includes('AI-powered answers grounded in your document text'),
+  'Chat disclaimer in i18n.ts is updated for both ID and EN'
+);
+assert(
+  cssRaw.includes('max-height: 92vh') &&
+    cssRaw.includes('padding: 22px 20px') &&
+    cssRaw.includes('min-height: 150px') &&
+    cssRaw.includes('overflow: visible !important'),
+  'Upload modal spacing & non-clipping .drop-zone (.upload-modal > * flex-shrink: 0, min-height: 150px, overflow: visible) are polished'
+);
+
 console.log('\n--- FRONTEND INTEGRITY SUMMARY ---');
 const passed = results.filter((r) => r.pass).length;
 const failed = results.filter((r) => !r.pass).length;

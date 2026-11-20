@@ -151,7 +151,7 @@ export const translations = {
     chat_suggested_4: "Apa saja tugas dan tanggung jawab utama saya?",
     chat_citation_based: "Berdasarkan",
     chat_citation_view: "Lihat sumber naskah",
-    chat_disclaimer: "Jawaban simulasi AI. Selalu verifikasi sumber naskah asli. Bukan nasihat hukum profesional.",
+    chat_disclaimer: "Jawaban berbasis AI dari naskah dokumen Anda. Selalu verifikasi dengan sumber pasal asli.",
 
     // Compare
     compare_eyebrow: "LIHAT PERBEDAANNYA",
@@ -608,7 +608,7 @@ export const translations = {
     chat_suggested_4: "What are my main responsibilities?",
     chat_citation_based: "Based on",
     chat_citation_view: "View source",
-    chat_disclaimer: "Sample AI answers. Always verify the source. Not legal advice.",
+    chat_disclaimer: "AI-powered answers grounded in your document text. Always verify with the original clause source.",
 
     // Compare
     compare_eyebrow: "SEE THE DIFFERENCE",

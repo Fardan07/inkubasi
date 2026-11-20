@@ -912,6 +912,7 @@ export default function App() {
     role: string
     text: string
     source?: number | null
+    provider?: "GEMINI" | "CLARIQ"
   }[]>([])
   const [compareFiles, setCompareFiles] = useState<string[]>(["", ""])
   const [compared, setCompared] = useState(false)
@@ -1576,11 +1577,11 @@ export default function App() {
   }
   const selectFile = (file?: File) => {
     if (!file) return
-    if (!/\.(pdf|docx|txt|jpg|jpeg|png)$/i.test(file.name)) {
+    if (!/\.(pdf|docx|txt|jpg|jpeg|png|webp)$/i.test(file.name)) {
       setUploadError(
         lang === "id"
-          ? "Silakan pilih dokumen dengan format PDF, DOCX, TXT, JPG, atau PNG."
-          : "Please choose a PDF, DOCX, TXT, JPG, or PNG document."
+          ? "Silakan pilih dokumen dengan format PDF, DOCX, TXT, JPG, PNG, atau WEBP."
+          : "Please choose a PDF, DOCX, TXT, JPG, PNG, or WEBP document."
       )
       return
     }
@@ -1612,7 +1613,7 @@ export default function App() {
         setUploadText(content)
       }
       reader.readAsText(file)
-    } else if (/\.pdf$/i.test(file.name)) {
+    } else if (/\.(pdf|jpe?g|png|webp)$/i.test(file.name)) {
       const reader = new FileReader()
       reader.onload = async () => {
         try {
@@ -1620,7 +1621,11 @@ export default function App() {
           const res = await fetch("/api/extract-pdf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ base64, fileName: file.name }),
+            body: JSON.stringify({
+              base64,
+              fileName: file.name,
+              mimeType: file.type || undefined,
+            }),
           })
           const json = await res.json()
           setExtractingPdf(false)
@@ -1639,8 +1644,8 @@ export default function App() {
           setExtractingPdf(false)
           setUploadError(
             lang === "id"
-              ? "Gagal mengekstrak PDF. Silakan coba lagi atau gunakan mode tempel teks."
-              : "Failed to extract PDF. Please retry or paste text."
+              ? "Gagal mengekstrak dokumen. Silakan coba lagi atau gunakan mode tempel teks."
+              : "Failed to extract document. Please retry or paste text."
           )
         }
       }
@@ -1652,14 +1657,6 @@ export default function App() {
         lang === "id"
           ? "Dokumen Word (.docx) terdeteksi. Silakan salin isi pasal kontrak Anda ke kolom di bawah ini untuk analisis AI langsung."
           : "Word document (.docx) detected. Please copy your contract clauses into the text box below for direct AI analysis."
-      )
-    } else if (/\.(jpe?g|png)$/i.test(file.name)) {
-      setExtractingPdf(false)
-      setUploadMode("paste")
-      setUploadError(
-        lang === "id"
-          ? "Dokumen foto/scan belum mendukung ekstraksi teks otomatis. Silakan gunakan PDF berbasis teks atau salin isi kontrak ke tab ini."
-          : "Image/photo scan does not support auto-extraction. Please use a text-based PDF or paste contract text into this tab."
       )
     } else {
       setExtractingPdf(false)
@@ -1788,6 +1785,7 @@ export default function App() {
           question: text,
           contractId: selected?.id || 1,
           lang,
+          history: messages.slice(-6),
         }),
       })
       if (res.status === 401) {
@@ -1803,6 +1801,7 @@ export default function App() {
               role: "assistant",
               text: json.data.text,
               source: json.data.source ?? null,
+              provider: json.data.provider === "GEMINI" ? "GEMINI" : "CLARIQ",
             },
           ])
           return
@@ -4343,7 +4342,7 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                               ? "AI Cek Kontrak"
                               : name.split(" ")[0]}
                             {m.role === "assistant" && (
-                              <small>{lang === "id" ? "AI · SIMULASI" : "AI · SAMPLE"}</small>
+                              <small>{m.provider === "GEMINI" ? "AI · GEMINI" : "AI · CLARIQ"}</small>
                             )}
                           </span>
                           <p>{m.text}</p>
@@ -5603,12 +5602,6 @@ Pihak Pertama (${hrdRepName} — ${hrdCompany}) & Pihak Kedua (${hrdEmpName})`
                 {uploadError}
               </p>
             )}
-            <div className="upload-demo-note">
-              <Icon name="spark" size={16} />
-              <p>
-                <b>{lang === "id" ? "Grounding Hukum AI." : "AI Legal Grounding."}</b> {lang === "id" ? "Dianalisis otomatis berbasis UU Ketenagakerjaan & KUHPerdata Indonesia." : "Automatically analyzed grounded in Indonesian Manpower Law & Civil Code."}
-              </p>
-            </div>
             <Button
               icon="spark"
               className="full-width"

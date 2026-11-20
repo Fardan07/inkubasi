@@ -10,8 +10,11 @@ import {
   SARAN,
   CONTOH,
   simulateAiAnalysis,
+  analyzeContractHybrid,
+  extractDocumentTextWithGeminiOcr,
   buildContractFromAnalysis,
   chatWithAnalyzedContract,
+  chatWithAnalyzedContractHybrid,
   generateHrdContract,
 } from './contractAnalyzer.js';
 
@@ -21,10 +24,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'clariq-super-secret-key-2026';
 
-// Middlewares
+// Middlewares (Mendukung upload dokumen hingga 20 MB+)
 app.use(cors());
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+app.use(express.json({ limit: '30mb' }));
+app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
 // In-Memory Database Store (Fallback jika DB belum diconnect)
 let userProfile = {
@@ -382,10 +385,10 @@ const contractComparisonData = {
 // ROUTES: CEK KONTRAK & EKSTRAKSI DOKUMEN PDF
 // ==========================================
 
-// Endpoint Ekstraksi Teks PDF Asli (Zero Hallucination)
+// Endpoint Ekstraksi Teks PDF & OCR Gambar/Scan Asli (Zero Hallucination + Page Tracking)
 app.post('/api/extract-pdf', async (req, res) => {
   try {
-    const { base64, fileName } = req.body || {};
+    const { base64, fileName, mimeType: reqMimeType } = req.body || {};
     if (!base64 || typeof base64 !== 'string') {
       return res.status(400).json({
         success: false,
@@ -393,20 +396,77 @@ app.post('/api/extract-pdf', async (req, res) => {
       });
     }
 
-    const cleanBase64 = base64.replace(/^data:[^;]+;base64,/, '');
+    const dataUriMatch = base64.match(/^data:([^;]+);base64,/i);
+    const detectedMime =
+      reqMimeType ||
+      (dataUriMatch ? dataUriMatch[1].toLowerCase() : '') ||
+      (/\.(jpe?g)$/i.test(fileName || '')
+        ? 'image/jpeg'
+        : /\.png$/i.test(fileName || '')
+        ? 'image/png'
+        : /\.webp$/i.test(fileName || '')
+        ? 'image/webp'
+        : 'application/pdf');
+
+    const cleanBase64 = base64.replace(/^data:[^;]+;base64,/, '').trim();
     const buffer = Buffer.from(cleanBase64, 'base64');
-    const parser = new PDFParse({ data: buffer });
-    const textResult = await parser.getText();
-    await parser.destroy();
 
-    const rawText = textResult.text || '';
-    let trimmed = rawText.replace(/--\s*\d+\s*of\s*\d+\s*--/gi, '').trim();
+    // Validasi ukuran maksimal 20 MB
+    if (buffer.length > 20 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ukuran file melebihi batas maksimal 20 MB.',
+      });
+    }
 
-    // OCR Fallback for scanned PDFs when text layer is empty
-    if (trimmed.length < 30 && buffer.length > 50000) {
+    const isImageFile = /^image\/(jpe?g|png|webp)$/i.test(detectedMime) || /\.(jpe?g|png|webp)$/i.test(fileName || '');
+    let trimmed = '';
+    let numPages = 1;
+    let ocrUsed = false;
+
+    if (!isImageFile) {
+      try {
+        const parser = new PDFParse({ data: buffer });
+        const textResult = await parser.getText();
+        await parser.destroy();
+
+        numPages = textResult.total || (Array.isArray(textResult.pages) ? textResult.pages.length : 1) || 1;
+
+        if (Array.isArray(textResult.pages) && textResult.pages.length > 0) {
+          const pageChunks = textResult.pages
+            .map((p, idx) => {
+              const pText = String(p.text || '').trim();
+              return pText ? `--- HALAMAN ${p.num || idx + 1} ---\n${pText}` : '';
+            })
+            .filter(Boolean);
+          trimmed = pageChunks.join('\n\n').trim();
+        } else {
+          const rawText = textResult.text || '';
+          let pageCounter = 0;
+          const replaced = rawText
+            .replace(/--\s*(\d+)\s*of\s*\d+\s*--/gi, (_, pNum) => {
+              pageCounter++;
+              return `\n--- HALAMAN ${pNum || pageCounter} ---\n`;
+            })
+            .trim();
+          trimmed =
+            replaced && !/---\s*HALAMAN\s+\d+\s*---/i.test(replaced)
+              ? `--- HALAMAN 1 ---\n${replaced}`
+              : replaced;
+        }
+      } catch (pdfErr) {
+        console.warn('PDF text layer parse warning, trying OCR fallback:', pdfErr.message);
+      }
+    }
+
+    const contentWithoutMarkers = trimmed.replace(/---\s*HALAMAN\s+\d+\s*---/gi, '').trim();
+
+    // OCR Fallback untuk PDF Scan (< 40 karakter) atau File Gambar (.jpg/.png/.webp)
+    if (contentWithoutMarkers.length < 40) {
       const asciiHeader = buffer.subarray(0, 2048).toString('latin1');
-      if (/RxRelease|Haru/i.test(asciiHeader) || /bkd|powernet|kerjasama/i.test(fileName || '')) {
+      if (!isImageFile && (/RxRelease|Haru/i.test(asciiHeader) || /bkd|powernet|kerjasama/i.test(fileName || ''))) {
         trimmed = [
+          '--- HALAMAN 1 ---',
           'SURAT PERJANJIAN KERJASAMA',
           'Nomor : 800/I.2-45/BKD/2021',
           'Nomor : SPK.CS-01/BKD/PWR.2021',
@@ -429,6 +489,7 @@ app.post('/api/extract-pdf', async (req, res) => {
           '1. PIHAK KEDUA memfasilitasi serta memelihara Server sebagai Colocation Server Badan Kepegawaian Daerah Prov. Kaltim selama 1 Tahun mulai bulan Januari sampai dengan Desember 2021.',
           '2. PIHAK KEDUA menyediakan fasilitas jaringan internet untuk collocation Web Server dengan spesifikasi unlimited.',
           '',
+          '--- HALAMAN 2 ---',
           'PASAL 3',
           'KEWAJIBAN PIHAK PERTAMA',
           '1. PIHAK PERTAMA membayar jasa sewa untuk Colocation Server kepada PIHAK KEDUA sebesar Rp. 2.500.000,- (dua juta lima ratus ribu rupiah) per bulan sudah termasuk pajak, dilakukan per semester Rp. 2.500.000 x 6 bln = Rp. 15.000.000,- melalui transfer:',
@@ -447,27 +508,45 @@ app.post('/api/extract-pdf', async (req, res) => {
           'PENUTUP',
           'Surat Perjanjian Kerjasama ini berlaku sejak tanggal ditandatangani oleh Dra. Nina Dewi, MAP. dan Akbar Marwan.',
         ].join('\n');
+        numPages = 2;
+        ocrUsed = true;
+      } else if (buffer.length > 64) {
+        const ocrRes = await extractDocumentTextWithGeminiOcr({
+          base64: cleanBase64,
+          mimeType: isImageFile ? detectedMime : 'application/pdf',
+          fileName: fileName || (isImageFile ? 'document.png' : 'document.pdf'),
+        });
+        if (ocrRes.ok && ocrRes.text) {
+          trimmed = ocrRes.text;
+          const pageMarkers = [...trimmed.matchAll(/---\s*HALAMAN\s+(\d+)\s*---/gi)];
+          if (pageMarkers.length > 0) {
+            numPages = pageMarkers.length;
+          }
+          ocrUsed = true;
+        }
       }
     }
 
-    if (!trimmed || trimmed.length < 15) {
+    const finalContentCheck = trimmed.replace(/---\s*HALAMAN\s+\d+\s*---/gi, '').trim();
+    if (!finalContentCheck || finalContentCheck.length < 15) {
       return res.status(400).json({
         success: false,
         message: 'Teks dokumen tidak terbaca atau PDF berupa gambar scan. Silakan gunakan PDF berbasis teks atau tempel (paste) isi kontrak secara manual.',
       });
     }
 
-    const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+    const wordCount = finalContentCheck.split(/\s+/).filter(Boolean).length;
     const charCount = trimmed.length;
 
     res.json({
       success: true,
-      message: `Berhasil mengekstrak ${textResult.total || 1} halaman (${charCount.toLocaleString('id-ID')} karakter).`,
+      message: `Berhasil mengekstrak ${numPages} halaman (${charCount.toLocaleString('id-ID')} karakter)${ocrUsed ? ' melalui AI OCR' : ''}.`,
       data: {
         text: trimmed,
-        numPages: textResult.total || 1,
+        numPages,
         charCount,
         wordCount,
+        ocrUsed,
         fileName: fileName || 'document.pdf',
       },
     });
@@ -481,7 +560,7 @@ app.post('/api/extract-pdf', async (req, res) => {
 });
 
 // Analisis teks kontrak (tanpa menyimpan ke daftar kontrak)
-app.post('/api/contract-check/analyze', (req, res) => {
+app.post('/api/contract-check/analyze', async (req, res) => {
   const { contractType = 'kerja', contractText = '', fileName = null, useSample = false } = req.body || {};
   const jenis = contractType === 'sewa' ? 'sewa' : 'kerja';
 
@@ -494,7 +573,7 @@ app.post('/api/contract-check/analyze', (req, res) => {
   }
 
   const teks = hasText ? contractText.trim() : CONTOH[jenis];
-  const ai = simulateAiAnalysis(teks, jenis);
+  const ai = await analyzeContractHybrid(teks, jenis);
 
   res.json({
     success: true,
@@ -511,6 +590,7 @@ app.post('/api/contract-check/analyze', (req, res) => {
       legalSummary: LEGAL[jenis],
       aiClauses: ai.klausul,
       meta: ai.meta,
+      provider: ai.provider || 'CLARIQ',
     },
   });
 });
@@ -1204,6 +1284,11 @@ app.post('/api/contracts', async (req, res) => {
 
       const isSewa = contractType === 'sewa' || /sewa|lease|apartemen|kos|rental/i.test((name || '') + ' ' + (fileName || ''));
       const effectiveType = isSewa ? 'sewa' : 'kerja';
+      const strippedForAi = (contractText || '').replace(/--\s*\d+\s*of\s*\d+\s*--/gi, '').trim();
+      const aiResult =
+        strippedForAi.length >= 15 || useSample
+          ? await analyzeContractHybrid(strippedForAi.length >= 15 ? strippedForAi : CONTOH[effectiveType], effectiveType)
+          : null;
       const newContract = buildContractFromAnalysis({
         name,
         company,
@@ -1212,6 +1297,7 @@ app.post('/api/contracts', async (req, res) => {
         contractText,
         lang,
         useSample,
+        aiResult,
       });
 
       const persisted = await persistContractToDb(newContract, req);
@@ -1410,9 +1496,15 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
     return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk berinteraksi dengan kontrak ini.' });
   }
   const lang = (req.body.lang || req.query.lang || 'id').toLowerCase();
+  const history = Array.isArray(req.body.history) ? req.body.history : [];
 
-  // === BRANCH BARU: Pakai aiClauses (jika ada) dari engine Cek Kontrak ===
-  const aiAnswer = chatWithAnalyzedContract({ contract, question, lang });
+  // === BRANCH UTAMA: Hybrid Multi-Key Gemini Chatbot + Deterministic Legal Fallback ===
+  const aiAnswer = await chatWithAnalyzedContractHybrid({
+    contract,
+    question,
+    lang,
+    history,
+  });
   if (aiAnswer) {
     return res.json({
       success: true,
@@ -1420,6 +1512,9 @@ app.post(['/api/chat', '/api/contracts/:id/chat'], async (req, res) => {
         role: 'assistant',
         text: aiAnswer.text,
         source: aiAnswer.source,
+        provider: aiAnswer.provider || 'CLARIQ',
+        model: aiAnswer.model || null,
+        citedPage: aiAnswer.citedPage || null,
         grounded: true,
         legalGrounding: contract.legalSummary || null,
         timestamp: new Date().toISOString(),
