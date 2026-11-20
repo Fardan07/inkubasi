@@ -282,6 +282,41 @@ assert(
   'Upload modal spacing & non-clipping .drop-zone (.upload-modal > * flex-shrink: 0, min-height: 150px, overflow: visible) are polished'
 );
 
+// 3i. Unified Final Sprint: Chat Loading, Anti-Race Condition, FormattedChatMessage, Dynamic Chips
+assert(
+  appRaw.includes('isChatLoading') &&
+    appRaw.includes('typing-dots') &&
+    appRaw.includes('disabled={isChatLoading}') &&
+    'chat_loading_status' in translations.id &&
+    'chat_loading_status' in translations.en,
+  'Chat loading bubble (.typing-dots), anti-race condition disable guard, and chat_loading_status i18n are implemented'
+);
+assert(
+  appRaw.includes('function FormattedChatMessage') &&
+    appRaw.includes('<FormattedChatMessage text={m.text} />') &&
+    cssRaw.includes('.chat-formatted-body'),
+  'Structured chat formatter (<FormattedChatMessage /> & .chat-formatted-body) is implemented'
+);
+assert(
+  appRaw.includes('selected.suggestedQuestions') &&
+    cssRaw.includes('text-overflow: ellipsis') &&
+    cssRaw.includes('flex-shrink: 0; white-space: nowrap'),
+  'Dynamic quick-prompt chips (suggestedQuestions) and non-clipping chat header (.chat-ready) are implemented'
+);
+
+// 3j. Compare Cards Read-Only Summary & Guardrails
+assert(
+  !appRaw.includes('compare_or_upload_new') &&
+    !('compare_or_upload_new' in translations.id) &&
+    !('compare_or_upload_new' in translations.en) &&
+    appRaw.includes('className="surface compare-summary-card"') &&
+    appRaw.includes('className="compare-table"') &&
+    appRaw.includes('compare_min_two_notice') &&
+    appRaw.includes('compare_same_doc_toast') &&
+    !cssRaw.includes('.compare-upload:hover'),
+  'Compare cards are read-only summary cards without direct file upload, with < 2 and identical-doc guardrails and intact compare table'
+);
+
 console.log('\n--- FRONTEND INTEGRITY SUMMARY ---');
 const passed = results.filter((r) => r.pass).length;
 const failed = results.filter((r) => !r.pass).length;

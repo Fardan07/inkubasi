@@ -1440,10 +1440,19 @@ app.delete('/api/contracts/:id', async (req, res) => {
       if (existing.userId && loggedUser && existing.userId !== loggedUser.id) {
         return res.status(403).json({ success: false, message: 'Anda tidak memiliki izin untuk menghapus kontrak ini.' });
       }
-      await prisma.contract.delete({ where: { id } });
+      await prisma.$transaction([
+        prisma.importantDate.deleteMany({ where: { contractId: String(id) } }),
+        prisma.clause.deleteMany({ where: { contractId: id } }),
+        prisma.contract.delete({ where: { id } }),
+      ]);
       deletedFromDb = true;
     } catch (err) {
       console.warn('⚠️ Contract delete in DB:', err.message);
+    }
+  }
+  for (let i = datesList.length - 1; i >= 0; i--) {
+    if (String(datesList[i].contractId) === String(id)) {
+      datesList.splice(i, 1);
     }
   }
   const index = contracts.findIndex((c) => c.id === id);
@@ -1592,19 +1601,42 @@ app.get('/api/dates', async (req, res) => {
   const loggedUser = await getUserFromReq(req);
   if (isDbConnected() && prisma) {
     try {
-      const userCondition = loggedUser ? { userId: loggedUser.id } : { id: -1 };
-      const dbDates = await prisma.importantDate.findMany({
-        where: userCondition,
-        orderBy: { id: 'asc' },
-      });
-      const normalized = dbDates.map((d) => ({
-        ...d,
-        contract: d.contractName || d.contract,
-      }));
+      if (!loggedUser) {
+        return res.json({ success: true, total: 0, data: [], dbConnected: true });
+      }
+      const [userContracts, dbDates] = await Promise.all([
+        prisma.contract.findMany({
+          where: { userId: loggedUser.id },
+          select: { id: true, name: true, nameId: true },
+        }),
+        prisma.importantDate.findMany({
+          where: { userId: loggedUser.id },
+          orderBy: { id: 'asc' },
+        }),
+      ]);
+      const contractMap = new Map(userContracts.map((c) => [String(c.id), c]));
+      const orphanIds = [];
+      const validDates = [];
+      for (const d of dbDates) {
+        const parent = d.contractId ? contractMap.get(String(d.contractId)) : null;
+        if (!parent) {
+          orphanIds.push(d.id);
+        } else {
+          validDates.push({
+            ...d,
+            contractName: parent.name || d.contractName,
+            contractNameId: parent.nameId || parent.name || d.contractName,
+            contract: parent.nameId || parent.name || d.contractName,
+          });
+        }
+      }
+      if (orphanIds.length > 0) {
+        await prisma.importantDate.deleteMany({ where: { id: { in: orphanIds } } });
+      }
       return res.json({
         success: true,
-        total: normalized.length,
-        data: normalized,
+        total: validDates.length,
+        data: validDates,
         dbConnected: true,
       });
     } catch (err) {
@@ -1612,12 +1644,27 @@ app.get('/api/dates', async (req, res) => {
     }
   }
 
+  const userContractMap = new Map(
+    (loggedUser ? contracts.filter((c) => c.userId === loggedUser.id) : []).map((c) => [String(c.id), c])
+  );
+  for (let i = datesList.length - 1; i >= 0; i--) {
+    const d = datesList[i];
+    if (loggedUser && d.userId === loggedUser.id && (!d.contractId || !userContractMap.has(String(d.contractId)))) {
+      datesList.splice(i, 1);
+    }
+  }
   const userDates = loggedUser ? datesList.filter((d) => d.userId === loggedUser.id) : [];
-  const normalizedFallback = userDates.map((d) => ({
-    ...d,
-    contractName: d.contractName || d.contract,
-    contract: d.contract || d.contractName,
-  }));
+  const normalizedFallback = userDates.map((d) => {
+    const parent = d.contractId ? userContractMap.get(String(d.contractId)) : null;
+    const resolvedName = parent ? (parent.name || d.contractName) : (d.contractName || d.contract);
+    const resolvedNameId = parent ? (parent.nameId || parent.name || resolvedName) : resolvedName;
+    return {
+      ...d,
+      contractName: resolvedName,
+      contractNameId: resolvedNameId,
+      contract: resolvedNameId,
+    };
+  });
   res.json({
     success: true,
     total: normalizedFallback.length,

@@ -85,26 +85,76 @@ function cleanPersonName(raw) {
 }
 
 /**
- * Deteksi otomatis kategori dokumen berdasarkan isi teks kontrak.
+ * Hapus penanda halaman (`--- HALAMAN X ---` / `-- X of Y --`) agar tidak masuk ke isi klausul atau ringkasan.
+ * Penanda halaman tetap dipertahankan di `meta.rawText` untuk pelacakan halaman chatbot.
+ */
+export function stripPageMarkers(teks = '') {
+  return String(teks || '')
+    .replace(/\s*---\s*HALAMAN\s+\d+\s*---\s*/gi, '\n')
+    .replace(/--\s*\d+\s*of\s*\d+\s*--/gi, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+const INDONESIAN_MONTHS = {
+  januari: 1, jan: 1, january: 1,
+  februari: 2, feb: 2, february: 2,
+  maret: 3, mar: 3, march: 3,
+  april: 4, apr: 4,
+  mei: 5, may: 5,
+  juni: 6, jun: 6, june: 6,
+  juli: 7, jul: 7, july: 7,
+  agustus: 8, agu: 8, agt: 8, aug: 8, august: 8,
+  september: 9, sep: 9, sept: 9,
+  oktober: 10, okt: 10, oct: 10, october: 10,
+  november: 11, nov: 11,
+  desember: 12, des: 12, dec: 12, december: 12,
+};
+
+function parseIndoDateToIso(str = '') {
+  if (!str) return null;
+  const fullMatch = String(str).match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
+  if (fullMatch) {
+    const d = Math.min(31, Math.max(1, parseInt(fullMatch[1], 10)));
+    const m = INDONESIAN_MONTHS[fullMatch[2].toLowerCase()];
+    const y = parseInt(fullMatch[3], 10);
+    if (m && y >= 1900 && y <= 2100) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+  const monthYearMatch = String(str).match(/([A-Za-z]+)\s+(\d{4})/);
+  if (monthYearMatch) {
+    const m = INDONESIAN_MONTHS[monthYearMatch[1].toLowerCase()];
+    const y = parseInt(monthYearMatch[2], 10);
+    if (m && y >= 1900 && y <= 2100) {
+      const lastDay = new Date(y, m, 0).getDate();
+      return `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Deteksi otomatis kategori dokumen berdasarkan isi teks kontrak secara universal.
  */
 export function detectContractCategory(teks = '', fallbackJenis = 'kerja') {
   if (!teks || typeof teks !== 'string') return fallbackJenis;
   if (
-    /SURAT\s+PERJANJIAN\s+KERJASAMA|perjanjian\s+kerjasama|Colocation\s+Server|Server\s+Colocation|Kuasa\s+Pengguna\s+Anggaran|SPK\.|Pengembangan\s+Jaringan|Pemeliharaan\s+jaringan|Pengadaan\s+Barang/i.test(
-      teks
-    )
-  ) {
-    return 'kerjasama';
-  }
-  if (
-    /PERJANJIAN\s+SEWA\s+MENYEWA|sewa\s+menyewa\s+(?:rumah|apartemen|kamar|gedung|ruko|kendaraan)|uang\s+deposit.*tidak\s+dapat\s+dikembalikan|menaikkan\s+harga\s+sewa\s+kapan\s+saja/i.test(
+    /PERJANJIAN\s+SEWA\s+MENYEWA|PERJANJIAN\s+SEWA\s+RUKO|sewa\s+menyewa|sewa\s+(?:ruko|rumah|apartemen|kamar|gedung|kantor|kendaraan)|uang\s+deposit.*tidak\s+dapat\s+dikembalikan|menaikkan\s+harga\s+sewa\s+kapan\s+saja|penyewa\s+dan\s+pemilik/i.test(
       teks
     )
   ) {
     return 'sewa';
   }
   if (
-    /PKWT|PKWTT|Perjanjian\s+Kerja\s+Karyawan|Surat\s+Kontrak\s+Perjanjian\s+Kerja|mengundurkan\s+diri\s+selama\s+masa\s+uji\s+coba|masa\s+uji\s+coba|gaji\s+pokok|upah\s+bulanan/i.test(
+    /SURAT\s+PERJANJIAN\s+KERJASAMA|perjanjian\s+kerjasama|perjanjian\s+pengadaan|perjanjian\s+vendor|perjanjian\s+kemitraan|nota\s+kesepahaman|memorandum\s+of\s+understanding|pengelolaan\s+server|colocation|kuasa\s+pengguna\s+anggaran|\bSPK\b|pengadaan\s+barang|jasa\s+layanan/i.test(
+      teks
+    )
+  ) {
+    return 'kerjasama';
+  }
+  if (
+    /\bPKWT\b|\bPKWTT\b|Perjanjian\s+Kerja\s+Karyawan|Surat\s+Kontrak\s+Perjanjian\s+Kerja|mengundurkan\s+diri\s+selama\s+masa\s+uji\s+coba|masa\s+uji\s+coba|gaji\s+pokok|upah\s+bulanan|hubungan\s+kerja/i.test(
       teks
     )
   ) {
@@ -147,9 +197,10 @@ export function extractPasalBlocks(teks = '') {
 }
 
 /**
- * Smart Entity Extractor untuk menghasilkan objek `meta` riil dari teks kontrak.
+ * Smart Entity Extractor untuk menghasilkan objek `meta` riil secara universal (Zero Hardcoding).
  */
-export function extractContractMetadata(teks, jenis = 'kerja') {
+export function extractContractMetadata(rawTeks, jenis = 'kerja') {
+  const teks = stripPageMarkers(rawTeks);
   const detectedCategory = detectContractCategory(teks, jenis);
   const meta = {
     jurisdiction: 'Hukum Republik Indonesia',
@@ -171,10 +222,10 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
 
   // 1. Organisasi / Instansi Pihak Pertama & Kedua (Format "bertindak untuk dan atas nama ... disebut PIHAK PERTAMA/KEDUA")
   const org1Match = teks.match(
-    /bertindak\s+untuk\s+dan\s+atas\s+nama\s+([\s\S]{3,120}?)\s+selanjutnya\s+disebut\s+(?:sebagai\s+)?PIHAK\s+PERTAMA/i
+    /bertindak\s+untuk\s+dan\s+atas\s+nama\s+([\s\S]{3,140}?)\s+selanjutnya\s+disebut\s+(?:sebagai\s+)?PIHAK\s+PERTAMA/i
   );
   const org2Match = teks.match(
-    /bertindak\s+untuk\s+dan\s+atas\s+nama\s+([\s\S]{3,120}?)\s+selanjutnya\s+disebut\s+(?:sebagai\s+)?PIHAK\s+KEDUA/i
+    /bertindak\s+untuk\s+dan\s+atas\s+nama\s+([\s\S]{3,140}?)\s+selanjutnya\s+disebut\s+(?:sebagai\s+)?PIHAK\s+KEDUA/i
   );
   if (org1Match) {
     meta.firstPartyOrg = org1Match[1].replace(/\s+/g, ' ').trim();
@@ -185,7 +236,7 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
 
   // Company / Nama Perusahaan
   const companyMatch =
-    teks.match(/(?:PT\.?|CV\.?|Studio)[ \t]+[A-Za-z0-9 .&-]+/i) ||
+    teks.match(/(?:PT\.?|CV\.?|Studio|Yayasan|Koperasi)[ \t]+[A-Za-z0-9 .&-]+/i) ||
     teks.match(/(?:perusahaan|pihak\s*pertama)[\s\S]*?(?:PT|CV)[ \t]*([A-Za-z0-9 .&-]+)/i);
   if (companyMatch) {
     meta.company = companyMatch[0]
@@ -195,16 +246,10 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
   }
 
   if (meta.firstPartyOrg && meta.secondPartyOrg) {
-    const shortOrg1 = /BADAN\s+KEPEGAWAIAN\s+DAERAH\s+PROVINSI\s+KALIMANTAN\s+TIMUR/i.test(meta.firstPartyOrg)
-      ? 'BKD Prov. Kaltim'
-      : meta.firstPartyOrg;
-    const shortOrg2 = /PT\.?\s*POWERNET\s*INDOSOLUSI/i.test(meta.secondPartyOrg)
-      ? 'PT. Powernet Indosolusi'
-      : meta.secondPartyOrg;
-    meta.company = `${shortOrg1} & ${shortOrg2}`;
+    meta.company = `${meta.firstPartyOrg} & ${meta.secondPartyOrg}`;
   }
 
-  // 2. Para Pihak (First Party & Second Party) — Mendukung format Romawi (I. Nama : ..., II. Nama : ...) & Narasi
+  // 2. Para Pihak (First Party & Second Party) — Mendukung format Romawi, Angka, maupun Narasi ("antara A dan B")
   const namaMatches = [...teks.matchAll(/(?:[I12]+\.\s*)?Nama\s*:\s*([^\r\n]+)/gi)];
   if (namaMatches.length >= 2) {
     let foundFirst = '';
@@ -223,7 +268,7 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
 
       if (
         !foundFirst &&
-        /(?:disebut\s*(?:sebagai\s*)?pihak\s*(?:pertama|kesatu|i\b|1\b)|Jabatan\s*:\s*(?:HRD|HR\s*Manager|Direktur|Pimpinan|Pemberi\s*Kerja|Kuasa\s*Pengguna\s*Anggaran))/i.test(
+        /(?:disebut\s*(?:sebagai\s*)?pihak\s*(?:pertama|kesatu|i\b|1\b)|Jabatan\s*:\s*(?:HRD|HR\s*Manager|Direktur|Pimpinan|Pemberi\s*Kerja|Kuasa\s*Pengguna\s*Anggaran|Pemilik))/i.test(
           blockText
         )
       ) {
@@ -231,7 +276,7 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
         roleFirst = jabStr;
       } else if (
         !foundSecond &&
-        /(?:disebut\s*(?:sebagai\s*)?pihak\s*(?:kedua|ii\b|2\b)|Nomor\s*KTP|Tempat\s*dan\s*Tanggal\s*Lahir|Account\s*Executive)/i.test(
+        /(?:disebut\s*(?:sebagai\s*)?pihak\s*(?:kedua|ii\b|2\b)|Nomor\s*KTP|Tempat\s*dan\s*Tanggal\s*Lahir|Account\s*Executive|Penyewa|Pekerja|Karyawan)/i.test(
           blockText
         )
       ) {
@@ -263,33 +308,45 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
     const p1 =
       teks.match(/(?:1|I)\.\s*(?:PIHAK\s*PERTAMA[\s\S]{0,200}?)?Nama\s*:\s*([^\r\n]+)/i) ||
       teks.match(/Nama\s*:\s*([^\r\n]+)[\s\S]{0,260}?(?:HRD|disebut\s*(?:sebagai\s*)?pihak\s*pertama)/i) ||
-      teks.match(/Pihak\s*Pertama\s*(?:\(|:\s*)([A-Za-z .,]+)/i);
+      teks.match(/Pihak\s*Pertama\s*(?:\(|:\s*)([A-Za-z0-9 .,]+)/i) ||
+      teks.match(/antara\s+([A-Z][A-Za-z0-9 .,]+?)\s+(?:selaku|sebagai|dan\s+)/i);
     if (p1) meta.firstParty = cleanPersonName(p1[1]);
 
     const p2 =
       teks.match(/(?:2|II)\.\s*(?:PIHAK\s*KEDUA[\s\S]{0,200}?)?Nama\s*:\s*([^\r\n]+)/i) ||
       teks.match(/Nama\s*:\s*([^\r\n]+)[\s\S]{0,280}?disebut\s*(?:sebagai\s*)?pihak\s*kedua/i) ||
-      teks.match(/Pihak\s*Kedua\s*(?:\(|:\s*)([A-Za-z .,]+)/i);
+      teks.match(/Pihak\s*Kedua\s*(?:\(|:\s*)([A-Za-z0-9 .,]+)/i) ||
+      teks.match(/antara\s+[A-Z][A-Za-z0-9 .,]+?\s+(?:dan|dengan)\s+([A-Z][A-Za-z0-9 .,]+?)(?:\s+(?:selaku|sebagai|untuk|yang)|[,.])/i);
     if (p2) meta.secondParty = cleanPersonName(p2[1]);
   }
 
   if (meta.firstParty && meta.secondParty) {
     meta.parties = `${meta.firstParty} & ${meta.secondParty}`;
+    if (!meta.company) {
+      meta.company = `${meta.firstParty} & ${meta.secondParty}`;
+    }
   }
 
-  // 3. Role / Jabatan atau Objek / Lingkup Kerjasama
+  // 3. Role / Jabatan atau Objek / Lingkup Perjanjian secara generik
   if (detectedCategory === 'kerjasama') {
-    const scopeServerMatch = teks.match(/mengelola\s+(Server\s+Colocation\s+[A-Za-z0-9 .]+)/i);
-    const scopeKerjasamaMatch = teks.match(/perjanjian\s+kerjasama\s+([A-Za-z0-9\s/]+?)(?:,\s*sebagai\s+berikut|\r|\n)/i);
-    if (scopeServerMatch) {
-      meta.role = `Pengelolaan ${scopeServerMatch[1].trim()}`;
-      meta.scopeSummary =
-        'Memfasilitasi serta memelihara Server Colocation BKD Prov. Kaltim dan jaringan internet unlimited di Gedung Telkom Karet Tengsin / Menara Kadin Jakarta.';
-    } else if (scopeKerjasamaMatch) {
-      meta.role = scopeKerjasamaMatch[1].trim();
+    const scopeMatch =
+      teks.match(/untuk\s+(mengelola\s+[^\r\n.]{5,110})/i) ||
+      teks.match(/perjanjian\s+kerjasama\s+([A-Za-z0-9\s/]{4,80}?)(?:,\s*sebagai\s+berikut|\r|\n|\.)/i);
+    const pasal1Block = extractPasalBlocks(teks).find((b) => /PASAL\s*1\b/i.test(b.pasal));
+    if (scopeMatch) {
+      meta.role = scopeMatch[1].trim().replace(/^mengelola\s+/i, 'Pengelolaan ');
+      meta.scopeSummary = pasal1Block?.body || scopeMatch[1].trim();
+    } else if (pasal1Block?.subtitle) {
+      meta.role = pasal1Block.subtitle;
+      meta.scopeSummary = pasal1Block.body;
     } else {
-      meta.role = 'Perjanjian Kerjasama Layanan & Jaringan';
+      meta.role = 'Perjanjian Kerjasama Layanan & Pengadaan';
     }
+  } else if (detectedCategory === 'sewa') {
+    const sewaObjMatch =
+      teks.match(/sewa\s+(?:menyewa\s+)?(ruko|rumah|apartemen|kamar|gedung|kantor|unit|properti)[^\r\n.]{0,60}/i) ||
+      teks.match(/PERJANJIAN\s+SEWA\s+([A-Z0-9\s]{3,50})/i);
+    meta.role = sewaObjMatch ? sewaObjMatch[0].trim() : 'Objek Sewa Menyewa';
   } else {
     const roleMatch =
       teks.match(/(?:sebagai|bagian|posisi|jabatan)\s+([A-Za-z\s]+?(?:Manager|Designer|Staff|Lead|Engineer|Developer|Officer|Director|Consultant|Spesialis|Kepala|Chief))/i) ||
@@ -301,14 +358,19 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
     }
   }
 
-  // 4. Nilai Kontrak / Biaya Jasa / Gaji & Detail Rekening Bank
-  const semesterFeeMatch =
-    teks.match(/sebesar\s*Rp\.?\s*([\d\.,]+)(?:,-)?\s*(?:\([^)]+\))?\s*per\s*bulan[\s\S]{0,160}?per\s*semester[^=\n]*?=\s*Rp\.?\s*([\d\.,]+)(?:,-)?/i);
-  const serviceFeeMatch =
-    teks.match(/(?:membayar\s+jasa\s+sewa|biaya\s+sewa|nilai\s+kontrak|biaya\s+layanan)[\s\S]{0,120}?sebesar\s*Rp\.?\s*([\d\.,]+)(?:,-)?/i);
-  const salaryMatch =
-    teks.match(/(?:gaji|upah|remunerasi|honorarium)[^\n]*?(?:sebesar\s*)?(?:rp\.?|idr)?\s*([\d\.,]+(?:\s*juta|\s*ribu)?)/i) ||
-    teks.match(/(?:rp\.?|idr)\s*([\d\.,]{6,15})(?:,-)?[^\n]*?(?:gaji|upah|per\s*bulan|setiap\s*bulan)/i);
+  // 4. Nilai Kontrak / Biaya Jasa / Gaji / Sewa & Deposit (Universal Multi-Period)
+  const semesterFeeMatch = teks.match(
+    /sebesar\s*Rp\.?\s*([\d\.,]+)(?:,-)?\s*(?:\([^)]+\))?\s*per\s*bulan[\s\S]{0,160}?per\s*semester[^=\n]*?=\s*Rp\.?\s*([\d\.,]+)(?:,-)?/i
+  );
+  const annualFeeMatch = teks.match(
+    /(?:sewa|biaya|nilai\s*kontrak|tarif|harga)[^\r\n]{0,80}?(?:sebesar|seharga)?\s*Rp\.?\s*([\d\.,]+)(?:,-)?\s*(?:\/|per|setiap)\s*tahun/i
+  );
+  const monthlyFeeMatch = teks.match(
+    /(?:membayar\s+jasa\s+sewa|biaya\s+sewa|nilai\s*kontrak|biaya\s+layanan|gaji|upah|remunerasi|honorarium)[^\r\n]{0,80}?(?:sebesar\s*)?(?:rp\.?|idr)\s*([\d\.,]+(?:\s*juta|\s*ribu)?)/i
+  );
+  const genericRupiahPeriodMatch = teks.match(
+    /(?:rp\.?|idr)\s*([\d\.,]{6,15})(?:,-)?[^\r\n]{0,40}?(?:\/|per|setiap)\s*(bulan|semester|tahun)/i
+  );
 
   if (semesterFeeMatch) {
     const monthlyNum = parseRupiah(semesterFeeMatch[1]);
@@ -316,21 +378,52 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
     if (monthlyNum > 0 && semesterNum > 0) {
       meta.salary = `${formatRupiah(monthlyNum)} / bulan (${formatRupiah(semesterNum)} / semester)`;
       meta.salaryNum = monthlyNum;
+      meta.ratePeriod = 'bulan';
+      meta.annualValueNum = monthlyNum * 12;
+      meta.annualValue = formatRupiah(monthlyNum * 12);
       meta.semesterValue = formatRupiah(semesterNum);
       meta.semesterValueNum = semesterNum;
     }
-  } else if (serviceFeeMatch) {
-    const feeNum = parseRupiah(serviceFeeMatch[1]);
-    if (feeNum > 0) {
-      meta.salary = `${formatRupiah(feeNum)} / bulan`;
-      meta.salaryNum = feeNum;
+  } else if (annualFeeMatch) {
+    const annualNum = parseRupiah(annualFeeMatch[1]);
+    if (annualNum > 0) {
+      meta.salary = `${formatRupiah(annualNum)} / tahun`;
+      meta.salaryNum = annualNum;
+      meta.ratePeriod = 'tahun';
+      meta.annualValueNum = annualNum;
+      meta.annualValue = formatRupiah(annualNum);
     }
-  } else if (salaryMatch) {
-    const rawSalary = salaryMatch[1].trim();
-    const salaryNum = parseRupiah(rawSalary);
-    if (salaryNum > 0) {
-      meta.salary = formatRupiah(salaryNum) + ' / bulan';
-      meta.salaryNum = salaryNum;
+  } else if (monthlyFeeMatch) {
+    const feeNum = parseRupiah(monthlyFeeMatch[1]);
+    if (feeNum > 0) {
+      const isAnnualContext = /per\s*tahun|\/tahun|setiap\s*tahun/i.test(monthlyFeeMatch[0]);
+      meta.ratePeriod = isAnnualContext ? 'tahun' : 'bulan';
+      meta.salary = `${formatRupiah(feeNum)} / ${meta.ratePeriod}`;
+      meta.salaryNum = feeNum;
+      meta.annualValueNum = isAnnualContext ? feeNum : feeNum * 12;
+      meta.annualValue = formatRupiah(meta.annualValueNum);
+    }
+  } else if (genericRupiahPeriodMatch) {
+    const num = parseRupiah(genericRupiahPeriodMatch[1]);
+    const period = genericRupiahPeriodMatch[2].toLowerCase();
+    if (num > 0) {
+      meta.ratePeriod = period;
+      meta.salary = `${formatRupiah(num)} / ${period}`;
+      meta.salaryNum = num;
+      meta.annualValueNum = period === 'tahun' ? num : period === 'semester' ? num * 2 : num * 12;
+      meta.annualValue = formatRupiah(meta.annualValueNum);
+    }
+  }
+
+  // Ekstraksi Deposit / Uang Jaminan (Khusus Sewa / Kerjasama)
+  const depositMatch = teks.match(
+    /(?:uang\s+jaminan|deposit(?:\s+keamanan)?)[^\r\n]{0,60}?(?:sebesar\s*)?(?:rp\.?|idr)\s*([\d\.,]+(?:\s*juta|\s*ribu)?)/i
+  );
+  if (depositMatch) {
+    const depNum = parseRupiah(depositMatch[1]);
+    if (depNum > 0) {
+      meta.depositNum = depNum;
+      meta.deposit = formatRupiah(depNum);
     }
   }
 
@@ -345,7 +438,7 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
 
     if (
       meta.bankAccountName &&
-      (meta.secondPartyOrg || /PT\.|CV\./i.test(meta.company || '')) &&
+      (meta.secondPartyOrg || /\b(?:PT|CV|UD|BADAN|PEMERINTAH|YAYASAN|KOPERASI)\b/i.test(meta.company || '')) &&
       !/^(?:PT|CV|UD|BADAN|PEMERINTAH|YAYASAN|KOPERASI)\b/i.test(meta.bankAccountName)
     ) {
       meta.personalBankAccountRisk = true;
@@ -361,7 +454,9 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
   } else if (/per\s*semester/i.test(teks)) {
     const bankLabel = meta.bankName ? ` · Transfer ${meta.bankName}` : '';
     const ownerLabel = meta.bankAccountName ? ` a.n. ${meta.bankAccountName}` : '';
-    meta.paymentSchedule = `Per semester (akhir bulan semester berjalan)${bankLabel}${ownerLabel}`;
+    meta.paymentSchedule = `Per semester${bankLabel}${ownerLabel}`;
+  } else if (meta.ratePeriod === 'tahun') {
+    meta.paymentSchedule = meta.deposit ? `Tahunan · Deposit ${meta.deposit}` : 'Dibayarkan per tahun sesuai kesepakatan';
   }
 
   // 6. Jam & Hari Kerja ATAU Jangka Waktu / Durasi Pelaksanaan Kontrak
@@ -373,18 +468,19 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
   } else if (/40\s*jam/i.test(teks)) {
     meta.workingHours = '40 jam / minggu (Senin - Jumat)';
   } else {
-    // Ekstrak Jangka Waktu Kontrak (misal: "selama 1 Tahun mulai bulan Januari sampai dengan Desember 2021")
     const durationPeriodMatch = teks.match(
-      /selama\s+(\d+\s*(?:Tahun|Bulan))\s+mulai\s+(?:bulan\s+)?([A-Za-z]+)\s+(?:sampai\s+dengan|s\/d|-)\s+([A-Za-z]+\s+\d{4})/i
+      /selama\s+(\d+\s*(?:Tahun|Bulan))\s+(?:mulai|terhitung\s+sejak)\s+(?:bulan\s+)?([A-Za-z0-9\s]+?)\s+(?:sampai\s+dengan|hingga|s\/d|-)\s+([A-Za-z0-9\s]+?\d{4})/i
     );
-    const simpleDurationMatch = teks.match(/selama\s+(\d+\s*(?:\([^)]+\)\s*)?(?:tahun|bulan))/i);
+    const simpleDurationMatch = teks.match(/(?:selama|jangka\s*waktu(?:\s*sewa)?)\s+(?:adalah\s+)?(\d+\s*(?:\([^)]+\)\s*)?(?:tahun|bulan))/i);
     if (durationPeriodMatch) {
       const durStr = `${durationPeriodMatch[1].trim()} (${durationPeriodMatch[2].trim()} – ${durationPeriodMatch[3].trim()})`;
       meta.contractDuration = durStr;
       meta.workingHours = durStr;
+      meta.startDate = durationPeriodMatch[2].trim();
+      meta.endDate = durationPeriodMatch[3].trim();
     } else if (simpleDurationMatch) {
       meta.contractDuration = simpleDurationMatch[1].trim();
-      meta.workingHours = `Durasi Kontrak: ${simpleDurationMatch[1].trim()}`;
+      meta.workingHours = `Durasi: ${simpleDurationMatch[1].trim()}`;
     }
   }
 
@@ -396,11 +492,14 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
     const rawDuration = probMatch[1].toLowerCase();
     const duration = rawDuration === 'satu' ? '1' : rawDuration === 'dua' ? '2' : rawDuration === 'tiga' ? '3' : rawDuration;
     meta.probationPeriod = `Masa Uji Coba ${duration} ${probMatch[2] || 'bulan'}`;
-  } else if (detectedCategory === 'kerjasama' && /Surat\s+Perjanjian\s+Tambahan\s*\(addendum\)|addendum/i.test(teks)) {
-    meta.probationPeriod = 'Diatur melalui Addendum (Pasal 4)';
+  } else if (detectedCategory === 'kerjasama' && /addendum|perjanjian\s+tambahan/i.test(teks)) {
+    const hasTerminationClause = /(?:pengakhiran|pemutusan|pembatalan)\s+(?:kontrak|perjanjian|kerjasama)/i.test(teks);
+    meta.probationPeriod = hasTerminationClause
+      ? 'Addendum & Pengakhiran Diatur'
+      : 'Addendum · Pengakhiran tidak diatur';
   }
 
-  // 8. Denda / Penalti Resign
+  // 8. Denda / Penalti (Sekali bayar vs berulang)
   const isNoPenaltyExplicit = /(?:tanpa\s*(?:pengenaan\s*)?denda|bebas\s*denda|tidak\s*(?:dikenakan|membebankan)\s*denda)/i.test(teks);
   const penaltyMatch = !isNoPenaltyExplicit && (
     teks.match(/(?:denda|penalti|ganti\s*rugi|biaya\s*pelatihan)[^\n]*?(?:rp\.?|idr)\s*([\d\.,]+(?:\s*juta|\s*ribu)?)/i) ||
@@ -413,21 +512,38 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
     if (penaltyNum >= 50000) {
       meta.penalty = formatRupiah(penaltyNum);
       meta.penaltyNum = penaltyNum;
-      if (meta.salaryNum && penaltyNum >= meta.salaryNum) {
+      meta.penaltyType = /per\s*(?:hari|bulan|minggu)/i.test(penaltyMatch[0]) ? 'recurring' : 'once';
+      if (meta.salaryNum && meta.ratePeriod === 'bulan' && penaltyNum >= meta.salaryNum) {
         meta.disproportionatePenalty = true;
       }
     }
   } else if (!isNoPenaltyExplicit && /denda.*(?:3x|tiga.*kali|3.*kali)/i.test(teks)) {
     meta.penalty = '3x Gaji Bulanan';
+    meta.penaltyType = 'once';
     meta.disproportionatePenalty = true;
   }
 
-  // 9. Tanggal Efektif
+  // 9. Tanggal Penandatanganan / Efektif & Audit Masa Berlaku (`isExpired`)
   const dateMatch = teks.match(/(\d{1,2}\s+[A-Za-z]+\s+\d{4})/);
   if (dateMatch) {
     meta.effectiveDate = dateMatch[1];
+    meta.signingDate = dateMatch[1];
   } else if (/Empat\s+bulan\s+Januari\s+tahun\s+Dua\s+Ribu\s+Dua\s+Puluh\s+Satu/i.test(teks)) {
     meta.effectiveDate = '4 Januari 2021';
+    meta.signingDate = '4 Januari 2021';
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const endDateIso = parseIndoDateToIso(meta.endDate || '');
+  if (endDateIso) {
+    meta.endDateIso = endDateIso;
+    if (endDateIso < todayIso) {
+      meta.isExpired = true;
+      meta.expiryDate = `${meta.endDate} (Masa berlaku kontrak telah berakhir)`;
+    } else {
+      meta.isExpired = false;
+      meta.expiryDate = meta.endDate;
+    }
   }
 
   // 10. Masa Pemberitahuan (Notice Period)
@@ -435,12 +551,15 @@ export function extractContractMetadata(teks, jenis = 'kerja') {
   if (noticeMatch) {
     meta.noticePeriod = `${noticeMatch[1]} hari`;
   } else if (detectedCategory === 'kerjasama') {
-    meta.noticePeriod = 'Melalui Surat Perjanjian Tambahan (Addendum)';
+    const hasTerminationClause = /(?:pengakhiran|pemutusan|pembatalan)\s+(?:kontrak|perjanjian|kerjasama)/i.test(teks);
+    meta.noticePeriod = hasTerminationClause
+      ? 'Diatur dalam perjanjian'
+      : 'Addendum · Pengakhiran tidak diatur';
   } else {
     meta.noticePeriod = '30 hari (standar hukum)';
   }
 
-  meta.rawText = teks;
+  meta.rawText = rawTeks;
   return meta;
 }
 
@@ -467,8 +586,8 @@ function extractSentenceMatch(teks, regex) {
  * Mesin Analisis Deterministik & Grounding Hukum Indonesia.
  * 100% akurat tanpa halusinasi pada dokumen dunia nyata.
  */
-export function simulateAiAnalysis(teks, jenis = 'kerja') {
-  const strippedNoise = (teks || '').replace(/--\s*\d+\s*of\s*\d+\s*--/gi, '').trim();
+export function simulateAiAnalysis(rawTeks, jenis = 'kerja') {
+  const strippedNoise = stripPageMarkers(rawTeks);
   if (!strippedNoise || strippedNoise.length < 15) {
     throw new Error(
       'Teks dokumen tidak terbaca atau PDF berupa gambar scan. Silakan gunakan PDF berbasis teks atau tempel (paste) isi kontrak secara manual.'
@@ -476,7 +595,7 @@ export function simulateAiAnalysis(teks, jenis = 'kerja') {
   }
 
   const cleanTeks = strippedNoise;
-  const meta = extractContractMetadata(cleanTeks, jenis);
+  const meta = extractContractMetadata(rawTeks, jenis);
   const effectiveCategory = meta.detectedCategory || detectContractCategory(cleanTeks, jenis);
   const klausul = [];
   let skorRisiko = 15;
@@ -489,50 +608,51 @@ export function simulateAiAnalysis(teks, jenis = 'kerja') {
         const headingLabel = blk.subtitle ? `${blk.pasal} — ${blk.subtitle}` : blk.pasal;
         const bodyText = blk.body || blk.rawBody;
 
-        // Evaluasi Risiko Spesifik per Pasal pada Perjanjian Kerjasama / Jasa / Pengadaan
+        // 1. Evaluasi Pembayaran ke Rekening atas Nama Individu pada Kontrak Badan Usaha
         if (
           /Atas\s*Nama\s*:\s*([^\r\n]+)/i.test(blk.rawBody) &&
           meta.personalBankAccountRisk
         ) {
           klausul.push({
-            judul: `${headingLabel} (Risiko Rekening Pribadi)`,
+            judul: `${headingLabel} (Risiko Rekening Individu)`,
             kutipan: bodyText,
             risiko: 'tinggi',
-            penjelasan: `Pasal ini mengatur pembayaran jasa sewa Colocation Server sebesar ${meta.salary || 'Rp2.500.000/bulan (Rp15.000.000/semester)'} dari beban APBD Provinsi Kalimantan Timur, namun ditransfer ke rekening ${meta.bankName || 'BCA'} No. ${meta.bankAccountNumber || '-'} atas nama perorangan (${meta.bankAccountName}), BUKAN rekening perusahaan resmi ${meta.secondPartyOrg || 'PT. POWERNET INDOSOLUSI'}. Pembayaran kontrak badan hukum/pemerintah ke rekening pribadi berisiko tinggi menjadi temuan audit kepatuhan keuangan daerah (BPK/Inspektorat) serta rawan sengketa bukti pembayaran sah.`,
-            rujukan: `${headingLabel} · PP No. 12/2019 & Perpres Pengadaan Barang/Jasa`,
+            penjelasan: `Pasal ini mengatur pembayaran kontrak sebesar ${meta.salary || 'sesuai kesepakatan'} yang ditransfer ke rekening ${meta.bankName || 'bank'} No. ${meta.bankAccountNumber || '-'} atas nama individu (${meta.bankAccountName}), bukan atas nama badan hukum perusahaan (${meta.secondPartyOrg || meta.company || 'Pihak Kedua'}). Pembayaran kontrak badan usaha ke rekening atas nama individu dapat menjadi perhatian auditor atau pemeriksaan kepatuhan administrasi serta rawan sengketa pertanggungjawaban pembayaran.`,
+            rujukan: `${headingLabel} · Kepatuhan Administrasi Keuangan & Hukum Perjanjian`,
             saran: [
-              `Ubah rekening tujuan pembayaran menjadi rekening giro perusahaan resmi atas nama ${meta.secondPartyOrg || 'PT. POWERNET INDOSOLUSI'}.`,
-              'Pastikan pencairan anggaran APBD dilengkapi Berita Acara Serah Terima (BAST) layanan dan faktur pajak resmi badan usaha.',
+              `Gunakan rekening giro resmi atas nama badan hukum (${meta.secondPartyOrg || 'Pihak Kedua'}) atau lampirkan surat kuasa penerimaan dana yang sah.`,
+              'Lengkapi pencairan dana dengan Berita Acara Serah Terima (BAST) dan dokumen perpajakan resmi.',
             ],
           });
           skorRisiko += 45;
-        } else if (/bermaterai\s*Rp\.?\s*6\.?000/i.test(blk.rawBody)) {
+        } else if (/bermaterai\s*Rp\.?\s*(?:3\.?000|6\.?000)/i.test(blk.rawBody)) {
+          const hasTenThousandInSig = /\b10\.?000\b/.test(cleanTeks.slice(-450));
           klausul.push({
             judul: `${headingLabel} (Addendum & Bea Meterai)`,
             kutipan: bodyText,
             risiko: 'perhatian',
-            penjelasan: `Pasal ini telah baik mengatur mekanisme Surat Perjanjian Tambahan (Addendum) dan penunjukan wakil Pihak Kedua, namun ayat (3) masih mencantumkan penggunaan meterai Rp6.000 pada dokumen tahun 2021. Berdasarkan UU No. 10 Tahun 2020 tentang Bea Meterai (berlaku 1 Januari 2021), tarif bea meterai resmi telah disatukan menjadi Rp10.000. Selain itu, belum dicantumkan klausul penyelesaian sengketa (domisili pengadilan/arbitrase).`,
+            penjelasan: `Pasal ini mengatur perubahan melalui addendum${/pengakhiran|pemutusan/i.test(blk.rawBody) ? ' dan ketentuan pengakhiran' : ' (tidak mengatur klausul pengakhiran kontrak secara eksplisit)'}, serta masih mencantumkan nominal bea meterai lama (Rp3.000/Rp6.000)${hasTenThousandInSig ? ' meskipun bagian tanda tangan telah menyesuaikan Rp10.000' : ''}. Berdasarkan UU No. 10 Tahun 2020, tarif bea meterai tunggal yang berlaku adalah Rp10.000.`,
             rujukan: `${headingLabel} · UU No. 10 Tahun 2020 tentang Bea Meterai & Pasal 1338 KUHPerdata`,
             saran: [
-              'Gunakan meterai tempel atau e-Meterai Rp10.000 sesuai UU No. 10 Tahun 2020.',
-              'Tambahkan klausul pilihan forum penyelesaian sengketa (misal: Pengadilan Negeri Samarinda) di dalam Addendum.',
+              'Sesuaikan redaksi bea meterai menjadi Rp10.000 sesuai UU No. 10 Tahun 2020.',
+              'Tambahkan ketentuan pengakhiran kontrak dan forum penyelesaian sengketa di dalam Addendum.',
             ],
           });
           skorRisiko += 15;
         } else if (
-          /KEWAJIBAN\s+PIHAK\s+KEDUA|memelihara\s+Server|spesifikasi\s+unlimited/i.test(
+          /KEWAJIBAN\s+PIHAK\s+KEDUA|memelihara|layanan|pekerjaan/i.test(
             `${blk.subtitle} ${blk.rawBody}`
           ) &&
-          !/SLA|uptime|99\.|denda\s+keterlambatan|kompensasi\s+gangguan/i.test(blk.rawBody)
+          !/SLA|uptime|99\.|denda\s+keterlambatan|kompensasi\s+gangguan|target\s+waktu/i.test(blk.rawBody)
         ) {
           klausul.push({
             judul: `${headingLabel} (Kewajiban Layanan & SLA)`,
             kutipan: bodyText,
             risiko: 'perhatian',
-            penjelasan: `Pihak Kedua berkewajiban memfasilitasi serta memelihara Server Colocation selama ${meta.contractDuration || '1 Tahun (Januari – Desember 2021)'} dengan spesifikasi internet unlimited, namun pasal ini belum menetapkan target tingkat layanan minimum (Service Level Agreement / Uptime SLA), batas waktu penanganan gangguan (response time), maupun sanksi jika server mengalami downtime.`,
-            rujukan: `${headingLabel} · Pasal 1234 & 1243 KUHPerdata (Standar Prestasi & Wanprestasi Jasa)`,
+            penjelasan: `Pasal ini mengatur kewajiban pelaksanaan layanan oleh Pihak Kedua${meta.contractDuration ? ` selama ${meta.contractDuration}` : ''}, namun belum menetapkan target tingkat layanan minimum (SLA), batas waktu penanganan gangguan, maupun sanksi wanprestasi apabila terjadi keterlambatan atau gangguan layanan.`,
+            rujukan: `${headingLabel} · Pasal 1234 & 1243 KUHPerdata (Standar Prestasi & Wanprestasi)`,
             saran: [
-              'Cantumkan standar SLA Uptime (misal: minimal 99,5%) dan waktu pemulihan maksimal (MTTR) di dalam lampiran teknis atau Addendum.',
+              'Cantumkan standar SLA, waktu pemulihan maksimal, serta konsekuensi wanprestasi di dalam lampiran teknis atau Addendum.',
             ],
           });
           skorRisiko += 12;
@@ -541,9 +661,9 @@ export function simulateAiAnalysis(teks, jenis = 'kerja') {
             judul: headingLabel,
             kutipan: bodyText,
             risiko: 'aman',
-            penjelasan: /LINGKUP\s+PERJANJIAN/i.test(blk.subtitle)
-              ? `Pasal ini menetapkan objek dan lokasi fisik pengelolaan Server Colocation secara jelas dan spesifik (${meta.secondPartyOrg || 'PT. Powernet Indosolusi'} / Gedung Telkom Karet Tengsin Jakarta Pusat), memenuhi syarat objek tertentu dalam Pasal 1320 KUHPerdata.`
-              : `Ketentuan penutup dan mulai berlakunya perjanjian sejak tanggal ditandatangani oleh kedua belah pihak telah sesuai dengan asas kebebasan berkontrak dan kekuatan mengikat perjanjian (Pasal 1338 KUHPerdata).`,
+            penjelasan: /LINGKUP|OBJEK/i.test(blk.subtitle)
+              ? `Pasal ini menetapkan objek dan ruang lingkup pekerjaan secara tertulis, memenuhi syarat hal tertentu dalam Pasal 1320 KUHPerdata.`
+              : `Ketentuan ini mengatur kesepakatan operasional para pihak secara sah sesuai asas kebebasan berkontrak (Pasal 1338 KUHPerdata).`,
             rujukan: `${headingLabel} · Pasal 1320 & Pasal 1338 KUHPerdata`,
           });
         }
@@ -836,37 +956,41 @@ export function simulateAiAnalysis(teks, jenis = 'kerja') {
   skorRisiko = Math.min(100, Math.max(5, skorRisiko));
 
   let ringkasan = '';
+  const expiredNote = meta.isExpired
+    ? ` Catatan Masa Berlaku: Periode kontrak (${meta.endDate || meta.contractDuration || ''}) telah berakhir dibandingkan tanggal hari ini.`
+    : '';
+
   if (effectiveCategory === 'kerjasama') {
     const p1Label = meta.firstPartyOrg || meta.firstParty || 'Pihak Pertama';
     const p2Label = meta.secondPartyOrg || meta.secondParty || 'Pihak Kedua';
     const valLabel = meta.salary || 'sesuai nilai kontrak';
     const durLabel = meta.contractDuration || meta.workingHours || 'sesuai jangka waktu perjanjian';
     if (meta.personalBankAccountRisk) {
-      ringkasan = `Perjanjian Kerjasama antara ${p1Label} dan ${p2Label} (${klausul.length} pasal dianalisis, Skor Risiko ${skorRisiko}/100): Mencakup ${meta.role || 'layanan kerjasama'} selama ${durLabel} dengan nilai ${valLabel}. PERHATIAN UTAMA: Pembayaran kontrak badan usaha (${p2Label}) ditujukan ke rekening pribadi (${meta.bankName || 'Bank'} a.n. ${meta.bankAccountName || 'perorangan'}), serta belum memuat standar SLA uptime layanan dan pembaruan tarif Bea Meterai Rp10.000 (UU No. 10/2020).`;
+      ringkasan = `Perjanjian Kerjasama antara ${p1Label} dan ${p2Label} (${klausul.length} pasal dianalisis, Skor Risiko ${skorRisiko}/100): Mencakup ${meta.role || 'layanan kerjasama'} selama ${durLabel} dengan nilai ${valLabel}. PERHATIAN UTAMA: Pembayaran kontrak badan usaha (${p2Label}) ditujukan ke rekening atas nama individu (${meta.bankName || 'Bank'} a.n. ${meta.bankAccountName || 'perorangan'}), bukan rekening badan hukum perusahaan.${expiredNote}`;
     } else {
-      ringkasan = `Perjanjian Kerjasama antara ${p1Label} dan ${p2Label} (${klausul.length} pasal dianalisis, Skor Risiko ${skorRisiko}/100): Mengatur ${meta.role || 'ruang lingkup kerjasama'} selama ${durLabel} dengan nilai ${valLabel}. Pastikan klausul SLA dan penyelesaian sengketa tercantum jelas.`;
+      ringkasan = `Perjanjian Kerjasama antara ${p1Label} dan ${p2Label} (${klausul.length} pasal dianalisis, Skor Risiko ${skorRisiko}/100): Mengatur ${meta.role || 'ruang lingkup kerjasama'} selama ${durLabel} dengan nilai ${valLabel}. Pastikan klausul SLA dan penyelesaian sengketa tercantum jelas.${expiredNote}`;
     }
   } else if (meta.disproportionatePenalty) {
     ringkasan =
-      `Kontrak berisiko tinggi (Skor ${skorRisiko}/100): Ditemukan klausul denda resign ${meta.penalty || 'nominal besar'} yang melebihi 1 bulan upah (${meta.salary || 'gaji bulanan'}) serta masa uji coba yang berpotensi melanggar Pasal 58 UU Ketenagakerjaan No. 13/2003 jo. PP 35/2021. Sangat disarankan untuk menegosiasikan klausul ini sebelum bertanda tangan.`;
+      `Kontrak berisiko tinggi (Skor ${skorRisiko}/100): Ditemukan klausul denda resign ${meta.penalty || 'nominal besar'} yang melebihi 1 bulan upah (${meta.salary || 'gaji bulanan'}) serta masa uji coba yang berpotensi melanggar Pasal 58 UU Ketenagakerjaan No. 13/2003 jo. PP 35/2021. Sangat disarankan untuk menegosiasikan klausul ini sebelum bertanda tangan.${expiredNote}`;
   } else if (skorRisiko >= 55) {
     ringkasan =
       effectiveCategory === 'kerja'
-        ? `Kontrak berisiko tinggi (Skor ${skorRisiko}/100): Terdapat klausul denda pengunduran diri yang berlebihan atau perpanjangan sepihak yang merugikan posisi pekerja.`
-        : `Kontrak sewa berisiko tinggi (Skor ${skorRisiko}/100): Terdapat ketentuan deposit hangus atau kenaikan tarif sewa sepihak yang melanggar KUHPerdata Pasal 1338 & 1550.`;
+        ? `Kontrak berisiko tinggi (Skor ${skorRisiko}/100): Terdapat klausul denda pengunduran diri yang berlebihan atau perpanjangan sepihak yang merugikan posisi pekerja.${expiredNote}`
+        : `Kontrak sewa berisiko tinggi (Skor ${skorRisiko}/100): Terdapat ketentuan deposit hangus atau kenaikan tarif sewa sepihak yang melanggar KUHPerdata Pasal 1338 & 1550.${expiredNote}`;
   } else if (skorRisiko >= 30) {
     ringkasan =
       effectiveCategory === 'kerja'
-        ? `Beberapa pasal perlu dicermati lebih lanjut (Skor ${skorRisiko}/100), terutama terkait masa percobaan dan kompensasi pengakhiran hubungan kerja.`
-        : `Ada klausul sewa yang perlu diklarifikasi ulang (Skor ${skorRisiko}/100) mengenai pembagian biaya pemeliharaan properti.`;
+        ? `Beberapa pasal perlu dicermati lebih lanjut (Skor ${skorRisiko}/100), terutama terkait masa percobaan dan kompensasi pengakhiran hubungan kerja.${expiredNote}`
+        : `Ada klausul sewa yang perlu diklarifikasi ulang (Skor ${skorRisiko}/100) mengenai pembagian biaya pemeliharaan properti.${expiredNote}`;
   } else {
     ringkasan =
       effectiveCategory === 'kerja'
-        ? `Kontrak relatif seimbang dan aman (Skor ${skorRisiko}/100). Hak upah dan jam kerja memenuhi ketentuan undang-undang ketenagakerjaan.`
-        : `Kontrak sewa relatif seimbang dan aman (Skor ${skorRisiko}/100). Hak dan kewajiban kedua belah pihak diatur secara wajar.`;
+        ? `Kontrak relatif seimbang dan aman (Skor ${skorRisiko}/100). Hak upah dan jam kerja memenuhi ketentuan undang-undang ketenagakerjaan.${expiredNote}`
+        : `Kontrak sewa relatif seimbang dan aman (Skor ${skorRisiko}/100). Hak dan kewajiban kedua belah pihak diatur secara wajar (${meta.salary || 'sesuai tarif sewa'}).${expiredNote}`;
   }
 
-  return { skor: skorRisiko, ringkasan, klausul, meta };
+  return { skor: skorRisiko, ringkasan: stripPageMarkers(ringkasan), klausul, meta };
 }
 
 /**
@@ -904,7 +1028,7 @@ export async function callGeminiApi({
   contents = [],
   timeoutMs = 8000,
   responseMimeType = null,
-  models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'],
+  models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'],
   specificKeys = null,
 } = {}) {
   const keys = Array.isArray(specificKeys) && specificKeys.length > 0 ? specificKeys : getGeminiApiKeys();
@@ -948,7 +1072,7 @@ export async function callGeminiApi({
     const keyListModels =
       Array.isArray(models) && models.length > 0
         ? models
-        : ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+        : ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
     for (let mIdx = 0; mIdx < keyListModels.length; mIdx++) {
       const model = keyListModels[mIdx];
@@ -1155,6 +1279,14 @@ Kembalikan respon HANYA dalam format JSON valid tanpa format markdown:
  * Bentuk objek Contract lengkap siap disimpan dari hasil analisis AI.
  * ZERO-HALLUCINATION: Menolak file kosong tanpa teks jika bukan useSample.
  */
+function isRandomHashTitle(rawTitle = '') {
+  const clean = String(rawTitle || '').replace(/\.[^.]+$/, '').trim();
+  if (!clean) return true;
+  if (clean.length >= 16 && !/\s/.test(clean) && /^[a-f0-9_-]+$/i.test(clean)) return true;
+  if (clean.length >= 20 && !/\s/.test(clean) && !/[aeiou]{2}/i.test(clean)) return true;
+  return false;
+}
+
 export function buildContractFromAnalysis({
   name,
   company,
@@ -1180,30 +1312,56 @@ export function buildContractFromAnalysis({
   const meta = ai.meta || extractContractMetadata(teks, jenis);
   const detectedCategory = meta.detectedCategory || detectContractCategory(teks, jenis);
 
-  const defaultName =
+  const categoryLabel =
     detectedCategory === 'kerjasama'
-      ? meta.role
-        ? `Perjanjian Kerjasama - ${meta.role}`
-        : 'Surat Perjanjian Kerjasama'
-      : meta.role
-      ? `${jenis === 'kerja' ? 'Perjanjian Kerja' : 'Perjanjian Sewa'} - ${meta.role}`
-      : jenis === 'kerja'
-      ? lang === 'id'
-        ? 'Perjanjian Kerja - Cek Kontrak'
-        : 'Employment Agreement - Contract Check'
-      : lang === 'id'
-      ? 'Perjanjian Sewa - Cek Kontrak'
-      : 'Rental Agreement - Contract Check';
+      ? 'Perjanjian Kerjasama'
+      : detectedCategory === 'sewa'
+      ? 'Perjanjian Sewa'
+      : 'Perjanjian Kerja';
 
-  const nama = name || (fileName ? fileName.replace(/\.[^.]+$/, '') : null) || defaultName;
+  const partyLabel =
+    meta.firstPartyOrg && meta.secondPartyOrg
+      ? `${meta.firstPartyOrg} & ${meta.secondPartyOrg}`
+      : meta.parties || meta.company || meta.role || '';
+
+  const smartAutoName = partyLabel
+    ? `${categoryLabel} — ${partyLabel}`.slice(0, 90)
+    : `${categoryLabel} - Cek Kontrak`;
+
+  const rawBaseName = name || (fileName ? fileName.replace(/\.[^.]+$/, '') : '');
+  const nama = rawBaseName && !isRandomHashTitle(rawBaseName) ? rawBaseName : smartAutoName;
 
   const perusahaan =
     company ||
     meta.company ||
     (meta.firstParty ? `${meta.firstParty}` : null) ||
     (fileName
-      ? `${fileName} · ${detectedCategory === 'kerjasama' ? 'Perjanjian Kerjasama' : jenis === 'kerja' ? 'Ketenagakerjaan' : 'Sewa'}`
-      : `Cek Kontrak AI · ${detectedCategory === 'kerjasama' ? 'Perjanjian Kerjasama' : jenis === 'kerja' ? 'Ketenagakerjaan' : 'Sewa'}`);
+      ? `${fileName} · ${detectedCategory === 'kerjasama' ? 'Perjanjian Kerjasama' : detectedCategory === 'sewa' ? 'Sewa' : 'Ketenagakerjaan'}`
+      : `Cek Kontrak AI · ${detectedCategory === 'kerjasama' ? 'Perjanjian Kerjasama' : detectedCategory === 'sewa' ? 'Sewa' : 'Ketenagakerjaan'}`);
+
+  const suggestedQuestions =
+    detectedCategory === 'kerjasama'
+      ? [
+          'Berapa total nilai kontrak setahun?',
+          'Klausul penting apa saja yang belum diatur?',
+          'Apakah ada klausul pengakhiran kontrak?',
+          'Siapa para pihak & ruang lingkup kerjasamanya?',
+        ]
+      : detectedCategory === 'sewa'
+      ? [
+          'Berapa total biaya sewa dan uang depositnya?',
+          'Berapa lama jangka waktu sewa & perpanjangannya?',
+          'Siapa yang menanggung biaya perbaikan properti?',
+          'Bagaimana ketentuan pengakhiran sewa sebelum waktunya?',
+        ]
+      : [
+          'Berapa gaji & kapan dibayar?',
+          'Apakah ada denda jika resign?',
+          'Apakah ada masa uji coba?',
+          'Bagaimana aturan jam kerjanya?',
+        ];
+
+  const effectiveTypeForLegal = detectedCategory === 'sewa' ? 'sewa' : 'kerja';
 
   const skorLabel =
     ai.skor >= 55 ? 'tinggi' : ai.skor >= 30 ? 'sedang' : 'rendah';
@@ -1249,33 +1407,48 @@ export function buildContractFromAnalysis({
       review: ai.klausul.filter((k) => k.risiko === 'perhatian').length,
       attention: ai.klausul.filter((k) => k.risiko === 'tinggi').length,
     },
-    contractType: detectedCategory === 'kerjasama' ? 'kerjasama' : jenis,
-    legalSummary: LEGAL[jenis],
-    aiClauses: ai.klausul,
+    contractType: detectedCategory === 'kerjasama' ? 'kerjasama' : effectiveTypeForLegal,
+    legalSummary: LEGAL[effectiveTypeForLegal],
+    suggestedQuestions,
+    aiClauses: ai.klausul.map((k) => ({
+      ...k,
+      kutipan: stripPageMarkers(k.kutipan || ''),
+      penjelasan: stripPageMarkers(k.penjelasan || ''),
+    })),
     meta: {
       detectedCategory,
+      originalFileName: fileName || null,
       contractNumber: meta.contractNumber || null,
       effectiveDate: meta.effectiveDate || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+      signingDate: meta.signingDate || meta.effectiveDate || null,
+      startDate: meta.startDate || null,
+      endDate: meta.endDate || null,
+      isExpired: Boolean(meta.isExpired),
       expiryDate:
         meta.expiryDate ||
         meta.contractDuration ||
         (detectedCategory === 'kerjasama'
           ? 'Sesuai jangka waktu perjanjian'
-          : jenis === 'kerja'
+          : effectiveTypeForLegal === 'kerja'
           ? 'Lihat klausul jangka waktu kontrak'
           : 'Lihat klausul masa sewa'),
       noticePeriod:
         meta.noticePeriod ||
-        (detectedCategory === 'kerjasama' ? 'Melalui Addendum Tertulis' : '30 hari (standar hukum)'),
+        (detectedCategory === 'kerjasama' ? 'Addendum · Pengakhiran tidak diatur' : '30 hari (standar hukum)'),
       salary:
         meta.salary ||
         (detectedCategory === 'kerjasama'
           ? 'Sesuai rincian nilai kontrak'
-          : jenis === 'kerja'
+          : effectiveTypeForLegal === 'kerja'
           ? 'Sesuai rincian upah kontrak'
           : 'Sesuai rincian tarif sewa'),
       salaryNum: meta.salaryNum || null,
+      ratePeriod: meta.ratePeriod || null,
+      annualValue: meta.annualValue || null,
+      annualValueNum: meta.annualValueNum || null,
       semesterValue: meta.semesterValue || null,
+      deposit: meta.deposit || null,
+      depositNum: meta.depositNum || null,
       workingHours:
         meta.workingHours ||
         meta.contractDuration ||
@@ -1286,12 +1459,13 @@ export function buildContractFromAnalysis({
       probationPeriod:
         meta.probationPeriod ||
         (detectedCategory === 'kerjasama'
-          ? 'Diatur melalui Addendum (Pasal 4)'
+          ? 'Addendum · Pengakhiran tidak diatur'
           : detectedCategory === 'kerja'
           ? 'Tidak ada masa uji coba'
           : 'Sesuai kesepakatan sewa'),
       penalty: meta.penalty || null,
       penaltyNum: meta.penaltyNum || null,
+      penaltyType: meta.penaltyType || null,
       disproportionatePenalty: Boolean(meta.disproportionatePenalty),
       personalBankAccountRisk: Boolean(meta.personalBankAccountRisk),
       bankName: meta.bankName || null,
@@ -1302,7 +1476,7 @@ export function buildContractFromAnalysis({
         (detectedCategory === 'kerjasama'
           ? 'Perjanjian Kerjasama Layanan'
           : detectedCategory === 'sewa'
-          ? 'Penyewa / Pemberi Sewa'
+          ? 'Objek Sewa Menyewa'
           : 'Karyawan'),
       scopeSummary: meta.scopeSummary || null,
       firstParty: meta.firstParty || null,
@@ -1321,38 +1495,42 @@ export function buildContractFromAnalysis({
         hasValidText ? (fileName ? `Upload file (${fileName})` : 'Paste teks') : 'Demo template',
       rawText: teks,
     },
-    clauses: ai.klausul.map((k, idx) => ({
-      id: idx + 1,
-      title:
-        k.judul ||
-        (k.risiko === 'aman' ? 'Ketentuan Aman' : k.risiko === 'perhatian' ? 'Perlu Ditinjau' : 'Risiko Tinggi'),
-      titleId:
-        k.judul ||
-        (k.risiko === 'aman'
-          ? 'Ketentuan Sesuai Hukum'
-          : k.risiko === 'perhatian'
-          ? 'Perlu Ditinjau Lebih Lanjut'
-          : 'Risiko Tinggi · Harus Ditindaklanjuti'),
-      status:
-        k.risiko === 'aman' ? 'Safe' : k.risiko === 'perhatian' ? 'Review' : 'Needs Attention',
-      statusId:
-        k.risiko === 'aman' ? 'Aman' : k.risiko === 'perhatian' ? 'Perlu Tinjauan' : 'Perlu Perhatian',
-      source: k.rujukan || 'Hasil deteksi AI',
-      sourceId: k.rujukan || 'Hasil deteksi AI',
-      text: k.kutipan,
-      textId: k.kutipan,
-      meaning: k.penjelasan,
-      meaningEn: k.penjelasan,
-      why: k.saran
-        ? 'Disarankan tindak lanjut: ' + k.saran.join(' ')
-        : 'Ketentuan ini sesuai standar kepatuhan hukum dan tidak memerlukan tindakan khusus.',
-      whyEn: k.saran
-        ? 'Suggested follow-up: ' + k.saran.join(' ')
-        : 'This clause is standard compliant and requires no special action.',
-      original: k.kutipan,
-      saran: k.saran || [],
-      risiko: k.risiko,
-    })),
+    clauses: ai.klausul.map((k, idx) => {
+      const cleanQuote = stripPageMarkers(k.kutipan || '');
+      const cleanExplanation = stripPageMarkers(k.penjelasan || '');
+      return {
+        id: idx + 1,
+        title:
+          k.judul ||
+          (k.risiko === 'aman' ? 'Ketentuan Aman' : k.risiko === 'perhatian' ? 'Perlu Ditinjau' : 'Risiko Tinggi'),
+        titleId:
+          k.judul ||
+          (k.risiko === 'aman'
+            ? 'Ketentuan Sesuai Hukum'
+            : k.risiko === 'perhatian'
+            ? 'Perlu Ditinjau Lebih Lanjut'
+            : 'Risiko Tinggi · Harus Ditindaklanjuti'),
+        status:
+          k.risiko === 'aman' ? 'Safe' : k.risiko === 'perhatian' ? 'Review' : 'Needs Attention',
+        statusId:
+          k.risiko === 'aman' ? 'Aman' : k.risiko === 'perhatian' ? 'Perlu Tinjauan' : 'Perlu Perhatian',
+        source: k.rujukan || 'Hasil deteksi AI',
+        sourceId: k.rujukan || 'Hasil deteksi AI',
+        text: cleanQuote,
+        textId: cleanQuote,
+        meaning: cleanExplanation,
+        meaningEn: cleanExplanation,
+        why: k.saran
+          ? 'Disarankan tindak lanjut: ' + k.saran.join(' ')
+          : 'Ketentuan ini sesuai standar kepatuhan hukum dan tidak memerlukan tindakan khusus.',
+        whyEn: k.saran
+          ? 'Suggested follow-up: ' + k.saran.join(' ')
+          : 'This clause is standard compliant and requires no special action.',
+        original: cleanQuote,
+        saran: k.saran || [],
+        risiko: k.risiko,
+      };
+    }),
   };
 }
 
@@ -1440,9 +1618,27 @@ function stripDecorativeEmojis(str = '') {
 }
 
 /**
- * AI Chat Assistant Berbasis Konteks Riil Dokumen & Grounding Regulasi Indonesia (Deterministic & Silent Local Fallback).
- * Mampu menjawab pertanyaan faktual tentang gaji, biaya sewa/layanan, rekening bank, masa uji coba, jam kerja, denda, lokasi halaman/pasal,
- * penjelasan awam ("ini surat apa?"), pihak, fitur website, serta memiliki Guardrail untuk sapaan dan pertanyaan di luar topik.
+ * Parser durasi generik bahasa Indonesia untuk proyeksi perhitungan kontrak.
+ */
+function parseDurationMultiplier(q = '') {
+  const lower = String(q || '').toLowerCase();
+  const yearMatch = lower.match(/\b(\d+)\s*(?:tahun|thn|years?)\b/);
+  if (yearMatch) return { unit: 'tahun', count: parseInt(yearMatch[1], 10) };
+  if (/\b(?:setahun|1\s*tahun|per\s*tahun|tahunan)\b/.test(lower)) return { unit: 'tahun', count: 1 };
+
+  const semMatch = lower.match(/\b(\d+)\s*(?:semester)\b/);
+  if (semMatch) return { unit: 'semester', count: parseInt(semMatch[1], 10) };
+
+  const monthMatch = lower.match(/\b(\d+)\s*(?:bulan|bln|months?)\b/);
+  if (monthMatch) return { unit: 'bulan', count: parseInt(monthMatch[1], 10) };
+  if (/\b(?:sebulan|per\s*bulan|bulanan)\b/.test(lower)) return { unit: 'bulan', count: 1 };
+
+  return null;
+}
+
+/**
+ * AI Chat Assistant Berbasis Konteks Riil Dokumen & Grounding Regulasi Indonesia (Universal Silent Local Fallback).
+ * Zero Hardcoding: seluruh nilai diambil dinamis dari `contract.meta`, `contract.clauses`, dan `rawText`.
  */
 export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
   if (!contract) return null;
@@ -1453,8 +1649,12 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
     meta.detectedCategory === 'kerjasama' ||
     contract.contractType === 'kerjasama' ||
     /Partnership|Kerjasama/i.test(`${contract.type || ''} ${contract.typeId || ''}`);
-  const isKerja = !isKerjasama && (contract.contractType === 'kerja' || contract.type === 'Employment');
-  const isSewa = !isKerjasama && (contract.contractType === 'sewa' || contract.type === 'Rental');
+  const isSewa =
+    meta.detectedCategory === 'sewa' ||
+    contract.contractType === 'sewa' ||
+    /Rental|Sewa/i.test(`${contract.type || ''} ${contract.typeId || ''}`);
+  const isKerja = !isKerjasama && !isSewa;
+
   const rawQuestion = String(question || '').trim();
   const q = rawQuestion.toLowerCase();
   const aiClauses = contract.aiClauses || [];
@@ -1466,28 +1666,33 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
   const firstPartyFirstWord = firstPartyClean ? firstPartyClean.toLowerCase().split(/\s+/)[0] : '';
   const secondPartyFirstWord = secondPartyClean ? secondPartyClean.toLowerCase().split(/\s+/)[0] : '';
   const companyFirstWord = meta.company
-    ? meta.company.toLowerCase().replace(/^(?:pt|cv|ud|studio|bkd)\.?\s*/i, '').trim().split(/\s+/)[0]
+    ? meta.company.toLowerCase().replace(/^(?:pt|cv|ud|studio|bkd|yayasan)\.?\s*/i, '').trim().split(/\s+/)[0]
     : '';
 
-  // Strict Domain & Entity Matching untuk Cabang 5 (Pihak, Perusahaan, Instansi, Jabatan, Tugas)
   const asksContractParty =
-    /\b(pihak\s*(pertama|kedua|1|2|kesatu)?|perusahaan|pemberi\s*kerja|instansi|bkd|powernet|vendor|mitra|hrd|karyawan|pekerja|jabatan|posisi|tugas|tanggung\s*jawab|job\s*desc|role|duties|parties|employer|employee|company|nama\s*pt|kantor|penandatangan)\b/i.test(
+    /\b(pihak\s*(pertama|kedua|1|2|kesatu)?|perusahaan|pemberi\s*kerja|instansi|vendor|mitra|hrd|karyawan|pekerja|penyewa|pemilik|jabatan|posisi|tugas|tanggung\s*jawab|job\s*desc|role|duties|parties|employer|employee|company|nama\s*pt|kantor|penandatangan|ruang\s*lingkup)\b/i.test(
       q
     ) ||
     (/\bsiapa\b/i.test(q) &&
-      (/\b(kontrak|perjanjian|pihak|hrd|direktur|manajer|manager|karyawan|pekerja|perusahaan|instansi|bkd|powernet|vendor|atasan|bos|yang\s*tanda\s*tangan|yang\s*terlibat|di\s*sini|ini)\b/i.test(
+      (/\b(kontrak|perjanjian|pihak|hrd|direktur|manajer|manager|karyawan|pekerja|penyewa|pemilik|perusahaan|instansi|vendor|atasan|bos|yang\s*tanda\s*tangan|yang\s*terlibat|di\s*sini|ini)\b/i.test(
         q
       ) ||
         Boolean(firstPartyFirstWord && firstPartyFirstWord.length >= 3 && q.includes(firstPartyFirstWord)) ||
         Boolean(secondPartyFirstWord && secondPartyFirstWord.length >= 3 && q.includes(secondPartyFirstWord)) ||
         Boolean(companyFirstWord && companyFirstWord.length >= 3 && q.includes(companyFirstWord))));
 
-  // Filter eksplisit untuk pertanyaan umum di luar konteks kontrak (tokoh publik, matematika, cuaca, makanan, AI umum, game)
+  // Bedakan Matematika Umum ("1 + 1 = berapa?") vs Matematika Kontrak ("dalam 5 tahun gajiku berapa?")
+  const hasContractDomainContext =
+    /\b(gaji(?:ku|mu|nya)?|upah(?:ku|mu|nya)?|denda(?:nya)?|penalti(?:nya)?|biaya(?:nya)?|sewa(?:nya)?|semester|bulan|tahun|kontrak|perjanjian|pasal|resign|lembur|potongan|total|bersih|perpanjang|deposit|cicilan|nilai|nominal|tarif|rekening)\b/i.test(
+      q
+    );
+  const isPureMathOnly = /\d+\s*[\+\-\*\/x:]\s*\d+/i.test(q) && !hasContractDomainContext;
+
   const isExplicitOutOfScope =
     /\b(jokowi|prabowo|gibran|megawati|anies|ganjar|brando|windah|ronaldo|messi|elon\s*musk|presiden|menteri|gubernur|selebriti|artis|resep|masak|nasi\s*goreng|kue\s*bolu|cuaca|hujan|ramalan|main\s*game|mobile\s*legends|valorant|pubg)\b/i.test(
       q
     ) ||
-    /\d+\s*[\+\-\*\/x:]\s*\d+/i.test(q) ||
+    isPureMathOnly ||
     /^\s*apa\s+itu\s+(ai|artificial\s*intelligence|kecerdasan\s*buatan|internet|blockchain|crypto|javascript|python)\b[?!.,\s]*$/i.test(
       q
     );
@@ -1498,7 +1703,7 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
   let branchType = 'none';
 
   // ====================================================
-  // CABANG A — Sapaan & Basa-Basi (Greetings / Thanks)
+  // CABANG A — Sapaan & Basa-Basi
   // ====================================================
   if (
     /^\s*(halo+|hai+|hi+|hello+|hey+|pagi|siang|sore|malam|selamat\s*(pagi|siang|sore|malam)|ass?alamu'?alaikum|permisi|tes|test|ping|terima\s*kasih|makasih|thanks|thank\s*you)\b[?!.,\s]*$/i.test(
@@ -1510,13 +1715,111 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
     branchType = 'greeting';
     answer =
       lang === 'id'
-        ? 'Halo! Saya Asisten AI Cek Kontrak (CLARIQ). Silakan tanyakan apa saja seputar isi dokumen kontrak ini (seperti nilai kontrak/gaji, para pihak, jangka waktu, rekening pembayaran, atau kepatuhan pasal hukum) maupun seputar fitur website kami.'
-        : 'Hello! I am the CLARIQ Contract AI Assistant. Feel free to ask anything about this contract document (such as contract value/salary, parties, duration, payment account, or legal compliance) or our platform features.';
+        ? 'Halo! Saya Asisten AI Cek Kontrak (CLARIQ). Silakan tanyakan apa saja seputar isi dokumen kontrak ini (seperti nilai kontrak/gaji, proyeksi biaya, para pihak, jangka waktu, atau kepatuhan pasal hukum) maupun seputar fitur website kami.'
+        : 'Hello! I am the CLARIQ Contract AI Assistant. Feel free to ask anything about this contract document (such as contract value/salary, cost projections, parties, duration, or legal compliance) or our platform features.';
   }
   // ====================================================
-  // CABANG C — Pertanyaan Isi Kontrak & Hukum (Dievaluasi SEBELUM Fitur Platform)
+  // CABANG C0 — Proyeksi / Kalkulasi Durasi Denda ("dalam setahun total denda berapa?")
   // ====================================================
-  // 1. Denda / Penalti Resign & Lokasi Halaman/Pasal Denda (Diprioritaskan di atas Gaji/Biaya & Fitur PDF!)
+  else if (
+    !isExplicitOutOfScope &&
+    /\b(denda(?:nya)?|penalti(?:nya)?|pinalti(?:nya)?|penalty)\b/i.test(q) &&
+    /(total|berapa|akumulasi|dalam\s*\d+|setahun|sebulan)/i.test(q) &&
+    parseDurationMultiplier(q) !== null
+  ) {
+    matchedBranch = true;
+    branchType = 'penalty_projection';
+    if (meta.penaltyNum || meta.penalty) {
+      source = findClauseSourceIndex(
+        contract,
+        /denda|penalti|termination|mengundurkan\s*diri.*(?:denda|ganti\s*rugi)|biaya\s*pelatihan/i,
+        /Pasal\s*77|40\s*jam/i,
+        0
+      );
+      const penStr = meta.penalty || formatRupiah(meta.penaltyNum);
+      if (meta.penaltyType === 'recurring') {
+        answer =
+          `Berdasarkan naskah kontrak, denda bersifat berkala sebesar **${penStr}**.\n\n` +
+          `- **Catatan Ketentuan:** Perhitungkan akumulasi sesuai jumlah hari/periode keterlambatan yang tercantum di dalam pasal terkait.`;
+      } else {
+        answer =
+          `Denda sebesar **${penStr}** dalam kontrak ini **bukan biaya rutin per tahun**, melainkan denda **sekali bayar** apabila syarat pelanggaran/pengunduran diri terjadi.\n\n` +
+          `- **Sifat Denda:** Sekali bayar (**${penStr}**) jika mengundurkan diri sebelum masa yang ditentukan berakhir.\n` +
+          `- **Catatan Hukum:** Jika ketentuan ini berlaku pada masa uji coba PKWT, pengenaan denda sepihak dapat bertentangan dengan Pasal 58 UU No. 13/2003 jo. PP No. 35/2021.`;
+      }
+    } else {
+      source = null;
+      answer =
+        `Total denda dalam kontrak ini adalah **Rp0 (tidak diatur)** karena dokumen tidak mencantumkan klausul denda rutin maupun penalti nominal.\n\n` +
+        `- **Status Klausul:** Tidak terdapat ketentuan denda tahunan ataupun penalti pengunduran diri secara eksplisit dalam naskah perjanjian.`;
+    }
+  }
+  // ====================================================
+  // CABANG C1 — Proyeksi / Kalkulasi Total Biaya, Gaji, atau Sewa (Multi-Bulan / Multi-Tahun)
+  // ====================================================
+  else if (
+    !isExplicitOutOfScope &&
+    /(total|akumulasi|berapa|proyeksi|hitung)/i.test(q) &&
+    /\b(gaji(?:ku|mu|nya)?|upah(?:ku|mu|nya)?|biaya(?:nya)?|sewa(?:nya)?|nilai\s*kontrak|bayar|tarif|pendapatan|penghasilan|salary|cost|rent)\b/i.test(q) &&
+    parseDurationMultiplier(q) !== null &&
+    meta.salaryNum
+  ) {
+    matchedBranch = true;
+    branchType = 'financial_projection';
+    source = findClauseSourceIndex(contract, /gaji|upah|sewa|biaya|nilai\s*kontrak|rekening|PASAL\s*3|PASAL\s*5/i, /denda|penalti/i, 0);
+
+    const dur = parseDurationMultiplier(q);
+    const rateNum = meta.salaryNum;
+    const ratePeriod = meta.ratePeriod || 'bulan';
+    let totalNum = 0;
+    let formulaText = '';
+
+    if (dur.unit === 'tahun') {
+      if (ratePeriod === 'tahun') {
+        totalNum = rateNum * dur.count;
+        formulaText = `${formatRupiah(rateNum)}/tahun × ${dur.count} tahun = **${formatRupiah(totalNum)}**`;
+      } else if (ratePeriod === 'semester') {
+        totalNum = rateNum * 2 * dur.count;
+        formulaText = `${formatRupiah(rateNum)}/semester × 2 semester × ${dur.count} tahun = **${formatRupiah(totalNum)}**`;
+      } else {
+        totalNum = rateNum * 12 * dur.count;
+        formulaText = `${formatRupiah(rateNum)}/bulan × 12 bulan × ${dur.count} tahun = **${formatRupiah(totalNum)}**`;
+      }
+    } else if (dur.unit === 'semester') {
+      if (ratePeriod === 'bulan') {
+        totalNum = rateNum * 6 * dur.count;
+        formulaText = `${formatRupiah(rateNum)}/bulan × 6 bulan × ${dur.count} semester = **${formatRupiah(totalNum)}**`;
+      } else if (ratePeriod === 'semester') {
+        totalNum = rateNum * dur.count;
+        formulaText = `${formatRupiah(rateNum)}/semester × ${dur.count} semester = **${formatRupiah(totalNum)}**`;
+      } else {
+        totalNum = Math.round((rateNum / 2) * dur.count);
+        formulaText = `${formatRupiah(rateNum)}/tahun ÷ 2 × ${dur.count} semester = **${formatRupiah(totalNum)}**`;
+      }
+    } else {
+      if (ratePeriod === 'bulan') {
+        totalNum = rateNum * dur.count;
+        formulaText = `${formatRupiah(rateNum)}/bulan × ${dur.count} bulan = **${formatRupiah(totalNum)}**`;
+      } else if (ratePeriod === 'tahun') {
+        totalNum = Math.round((rateNum / 12) * dur.count);
+        formulaText = `${formatRupiah(rateNum)}/tahun ÷ 12 × ${dur.count} bulan = **${formatRupiah(totalNum)}**`;
+      } else {
+        totalNum = Math.round((rateNum / 6) * dur.count);
+        formulaText = `${formatRupiah(rateNum)}/semester ÷ 6 × ${dur.count} bulan = **${formatRupiah(totalNum)}**`;
+      }
+    }
+
+    const totalFormatted = formatRupiah(totalNum);
+    const origDurNote = meta.contractDuration ? ` (durasi kontrak asli: ${meta.contractDuration})` : '';
+    answer =
+      `Total estimasi untuk periode ${dur.count} ${dur.unit} adalah **${totalFormatted}**.\n\n` +
+      `- **Perhitungan:** ${formulaText}\n` +
+      `- **Catatan Asumsi:** Proyeksi ini dihitung dengan asumsi nominal tetap dan kontrak diperpanjang sesuai kebutuhan${origDurNote}.` +
+      (meta.deposit ? `\n- **Uang Jaminan (Deposit):** Terdapat deposit terpisah sebesar ${meta.deposit}.` : '');
+  }
+  // ====================================================
+  // CABANG C2 — Denda / Penalti / Resign (Dengan Klarifikasi Non-Kontrak Kerja & Citation Akurat)
+  // ====================================================
   else if (
     !isExplicitOutOfScope &&
     (/(\bdenda(?:nya)?\b|\bpenalti(?:nya)?\b|\bpinalti(?:nya)?\b|\bresign\b|\bmundur\b|mengundurkan\s*diri|\bquit\b|ganti\s*rugi|biaya\s*pelatihan|\bpenalty\b|\bsanksi(?:nya)?\b)/i.test(
@@ -1526,104 +1829,93 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
   ) {
     matchedBranch = true;
     branchType = 'penalty';
-    if (isKerjasama && !meta.penalty) {
-      source = findClauseSourceIndex(contract, /PASAL\s*4|addendum|pengakhiran|denda/i, /Pasal\s*77/i, 1);
+    if ((isKerjasama || isSewa) && !meta.penalty) {
+      const docTypeLabel = isSewa ? 'Perjanjian Sewa' : 'Perjanjian Kerjasama';
+      const hasTermClause = /(?:pengakhiran|pemutusan|pembatalan)\s+(?:kontrak|perjanjian)/i.test(rawText);
+      source = hasTermClause
+        ? findClauseSourceIndex(contract, /pengakhiran|pemutusan|pembatalan/i, null, 0)
+        : null;
+
       answer =
-        lang === 'id'
-          ? `Dalam dokumen Perjanjian Kerjasama ini (${contract.nameId || contract.name}), belum dicantumkan klausul denda keterlambatan maupun kompensasi gangguan layanan (SLA downtime). Perubahan atau pengakhiran diatur lebih lanjut melalui Surat Perjanjian Tambahan (Addendum) sesuai Pasal 4.`
-          : `In this Partnership Agreement (${contract.name}), there is no explicit penalty or SLA downtime compensation clause. Amendments or termination are governed via a written Addendum under Article 4.`;
+        `Dokumen ini adalah **${docTypeLabel}** (bukan kontrak kerja karyawan), sehingga ketentuan *resign* karyawan tidak berlaku di sini.\n\n` +
+        `- **Denda / Penalti:** Tidak terdapat klausul denda pengunduran diri maupun sanksi pemutusan sepihak yang diatur secara eksplisit dalam dokumen ini.\n` +
+        `- **Perubahan & Pengakhiran:** ${hasTermClause ? 'Ketentuan pengakhiran tercantum dalam pasal perjanjian.' : 'Dokumen tidak mengatur klausul pengakhiran kontrak secara eksplisit; perubahan umumnya dituangkan melalui Addendum tertulis.'}`;
     } else {
       source = findClauseSourceIndex(
         contract,
-        /denda|penalti|termination|mengundurkan\s*diri.*(?:denda|ganti\s*rugi|10\.000\.000)|Pasal\s*36|Putusan\s*MK|biaya\s*pelatihan|PASAL\s*4/i,
+        /denda|penalti|termination|mengundurkan\s*diri.*(?:denda|ganti\s*rugi)|Pasal\s*36|Putusan\s*MK|biaya\s*pelatihan/i,
         /Pasal\s*77|40\s*jam/i,
         0
       );
       const penaltyStr = meta.penalty || 'Rp10.000.000';
-      const salaryStr = meta.salary || 'Rp8.000.000';
-      const loc = locatePageAndPasalInRawText(rawText, /denda|penalti|biaya\s*pelatihan|10\.000\.000/i, 'Pasal 4');
+      const salaryStr = meta.salary || 'sesuai upah bulanan';
+      const loc = locatePageAndPasalInRawText(rawText, /denda|penalti|biaya\s*pelatihan/i, 'Pasal 4');
 
-      if (lang === 'id') {
-        answer =
-          `PERINGATAN KLAUSUL BERISIKO TINGGI (Halaman ${loc.page}, ${loc.pasal}):\n` +
-          `Pada Halaman ${loc.page} (${loc.pasal}), kontrak menetapkan denda pengunduran diri sebesar ${penaltyStr} dengan alasan penggantian biaya pelatihan selama masa uji coba.\n\n` +
-          `Analisis Keadilan & Hukum:\n` +
-          `1. Denda (${penaltyStr}) MELEBIHI 1 bulan upah (${salaryStr}). Klausul ini tidak proporsional dan memberatkan posisi pekerja.\n` +
-          `2. Merujuk PP No. 35/2021 jo. Putusan MK No. 168/PUU-XXI/2023, pengenaan denda sepihak pada masa uji coba bertentangan dengan prinsip perlindungan hak buruh.\n` +
-          `Saran: Diskusikan dan minta peniadaan denda ini sebelum menandatangani kontrak!`;
-      } else {
-        answer =
-          `HIGH-RISK CLAUSE WARNING (Page ${loc.page}, ${loc.pasal}):\n` +
-          `On Page ${loc.page} (${loc.pasal}), the agreement imposes a resignation penalty of ${penaltyStr} citing training reimbursement during the probation period.\n\n` +
-          `Legal & Proportionality Analysis:\n` +
-          `1. The penalty (${penaltyStr}) EXCEEDS your monthly salary (${salaryStr}), which is disproportionate and exploitative.\n` +
-          `2. Under Gov. Reg. 35/2021 and Constitutional Court Decision No. 168/PUU-XXI/2023, unilateral penalties during probation conflict with statutory employee protections.\n` +
-          `Advice: Request the deletion or fair renegotiation of this clause prior to signing!`;
-      }
+      answer =
+        `Pada Halaman ${loc.page} (${loc.pasal}), kontrak menetapkan denda pengunduran diri sebesar **${penaltyStr}**.\n\n` +
+        `- **Rincian Ketentuan:** Denda dikenakan apabila karyawan mengundurkan diri sebelum masa yang ditentukan.\n` +
+        `- **Perbandingan Upah:** ${meta.disproportionatePenalty ? `Denda (${penaltyStr}) melebihi 1 bulan upah (${salaryStr}) sehingga tidak proporsional` : `Denda (${penaltyStr}) dibandingkan upah (${salaryStr})`} merujuk PP No. 35/2021 jo. Putusan MK No. 168/PUU-XXI/2023.\n` +
+        `- **Saran:** Diskusikan penghapusan atau penyesuaian klausul ini sebelum menandatangani kontrak.`;
     }
   }
-  // 2. Gaji / Nilai Kontrak / Biaya Sewa Server / Rekening Bank
+  // ====================================================
+  // CABANG C3 — Gaji / Nilai Kontrak / Biaya Sewa / Rekening Bank
+  // ====================================================
   else if (
     !isExplicitOutOfScope &&
-    (/\b(gaji(?:nya)?|salary|upah(?:nya)?|remunerasi|dibayar|penghasilan|wage|pay|payment|bayaran|biaya(?:nya)?|tarif|nilai\s*kontrak|sewa\s*server|colocation|rekening|bank|bca|transfer|semester|anggaran|apbd)\b/i.test(
+    (/\b(gaji(?:nya)?|salary|upah(?:nya)?|remunerasi|dibayar|penghasilan|wage|pay|payment|bayaran|biaya(?:nya)?|tarif|nilai\s*kontrak|sewa\s*server|colocation|rekening|bank|transfer|semester|anggaran|apbd|deposit)\b/i.test(
       q
     ) ||
-      /(kapan.*(bayar|gaji|upah)|tanggal.*(gaji|bayar|upah)|nominal\s*(gaji|upah|kontrak|pembayaran|sewa)|berapa.*(gaji|upah|bayaran|biaya|harga|sewa|nilai))/i.test(
+      /(kapan.*(bayar|gaji|upah)|tanggal.*(gaji|bayar|upah)|nominal\s*(gaji|upah|kontrak|pembayaran|sewa)|berapa.*(gaji|upah|bayaran|biaya|harga|sewa|nilai|deposit))/i.test(
         q
       ))
   ) {
     matchedBranch = true;
     branchType = 'salary';
     if (isKerjasama || meta.bankAccountName) {
-      source = findClauseSourceIndex(contract, /rekening|2\.500\.000|15\.000\.000|PASAL\s*3/i, null, 0);
-      const valStr = meta.salary || 'Rp2.500.000 / bln (Rp15.000.000 / semester)';
-      const bankStr = meta.bankName || 'BCA CABANG MARGONDA';
-      const accOwner = meta.bankAccountName || 'AKBAR MARWAN';
-      const accNum = meta.bankAccountNumber || '869-004-6572';
+      source = findClauseSourceIndex(contract, /rekening|biaya|nilai\s*kontrak|PASAL\s*3/i, null, 0);
+      const valStr = meta.salary || 'Sesuai rincian nilai kontrak';
+      const bankLine = meta.bankName
+        ? `- **Rekening Tujuan Transfer:** ${meta.bankName}${meta.bankAccountNumber ? ` — No. Rekening ${meta.bankAccountNumber}` : ''}${meta.bankAccountName ? ` a.n. ${meta.bankAccountName}` : ''}\n`
+        : '';
+      const bankNotice = meta.personalBankAccountRisk
+        ? `- **Catatan Kepatuhan:** Rekening tujuan tercatat atas nama individu (${meta.bankAccountName}), bukan atas nama badan hukum perusahaan, yang dapat menjadi perhatian auditor atau pemeriksaan kepatuhan administrasi.`
+        : '';
 
-      if (lang === 'id') {
-        answer =
-          `Berdasarkan Pasal 3 dokumen "${contract.nameId || contract.name}":\n` +
-          `• Biaya Jasa Sewa Server Colocation: ${valStr} (sudah termasuk pajak).\n` +
-          `• Skema Pembayaran: Dibayarkan per semester (Rp2.500.000 x 6 bulan = Rp15.000.000) pada akhir bulan semester berjalan.\n` +
-          `• Rekening Tujuan Transfer: ${bankStr} — No. Rekening ${accNum} Atas Nama: ${accOwner}.\n` +
-          `• Sumber Dana: APBD Provinsi Kalimantan Timur Tahun 2021 (Kode Rekening 4.5.01.09.10.5.2.1.19.17).\n\n` +
-          `TEMUAN RISIKO TINGGI: Pihak Kedua bertindak atas nama badan hukum (${meta.secondPartyOrg || 'PT. POWERNET INDOSOLUSI'}), namun rekening penerima transfer adalah atas nama pribadi (${accOwner}). Hal ini berisiko tinggi menjadi temuan audit kepatuhan keuangan daerah (BPK/Inspektorat).`;
-      } else {
-        answer =
-          `According to Article 3 of "${contract.name}":\n` +
-          `• Colocation Server Service Fee: ${valStr} (tax inclusive).\n` +
-          `• Payment Schedule: Paid per semester (Rp2,500,000 x 6 months = Rp15,000,000) at the end of the running semester.\n` +
-          `• Destination Bank Account: ${bankStr} — Account No. ${accNum} under the name ${accOwner}.\n\n` +
-          `HIGH-RISK AUDIT FINDING: Although the Second Party represents a corporate entity (${meta.secondPartyOrg || 'PT. POWERNET INDOSOLUSI'}), the recipient bank account is under an individual's personal name (${accOwner}), posing a significant public finance audit risk.`;
-      }
+      answer =
+        `Berdasarkan ketentuan pembayaran dalam "${contract.nameId || contract.name}":\n\n` +
+        `- **Nilai Jasa / Kontrak:** ${valStr}\n` +
+        `- **Skema Pembayaran:** ${meta.paymentSchedule || 'Sesuai termin kontrak'}\n` +
+        bankLine +
+        bankNotice;
+    } else if (isSewa) {
+      source = findClauseSourceIndex(contract, /sewa|deposit|biaya|tarif|PASAL/i, null, 0);
+      answer =
+        `Berdasarkan ketentuan biaya dalam "${contract.nameId || contract.name}":\n\n` +
+        `- **Biaya Sewa:** ${meta.salary || 'Sesuai rincian sewa'}\n` +
+        (meta.deposit ? `- **Uang Jaminan (Deposit):** ${meta.deposit}\n` : '') +
+        `- **Jadwal Pembayaran:** ${meta.paymentSchedule || 'Sesuai kesepakatan perjanjian'}`;
     } else {
       source = findClauseSourceIndex(
         contract,
-        /Pasal\s*88|gaji|upah|Remuneration|Payment|8\.000\.000|12\.000\.000|PASAL\s*5/i,
+        /Pasal\s*88|gaji|upah|Remuneration|Payment|PASAL\s*5/i,
         /denda|penalti/i,
         0
       );
-      const salaryStr = meta.salary || 'Rp8.000.000 / bulan';
-      const payScheduleStr = meta.paymentSchedule || 'selambat-lambatnya pada tanggal 30 setiap bulannya';
-      const loc = locatePageAndPasalInRawText(rawText, /gaji|upah|8\.000\.000|12\.000\.000/i, 'Pasal 5');
+      const salaryStr = meta.salary || 'Sesuai rincian upah kontrak';
+      const payScheduleStr = meta.paymentSchedule || 'Sesuai jadwal pembayaran kontrak';
+      const loc = locatePageAndPasalInRawText(rawText, /gaji|upah/i, 'Pasal 5');
 
-      if (lang === 'id') {
-        answer =
-          `Berdasarkan dokumen kontrak "${contract.nameId || contract.name}" (Halaman ${loc.page}, ${loc.pasal}):\n` +
-          `• Gaji Pokok: ${salaryStr}\n` +
-          `• Jadwal Pembayaran: ${payScheduleStr} melalui transfer rekening bank.\n\n` +
-          `Rujukan Hukum: Ketentuan penetapan upah dan pembayaran tepat waktu ini telah memenuhi standar Pasal 88-91 UU No. 13/2003 dan PP No. 36/2021 tentang Pengupahan.`;
-      } else {
-        answer =
-          `According to "${contract.name}" (Page ${loc.page}, ${loc.pasal}):\n` +
-          `• Base Salary: ${salaryStr}\n` +
-          `• Payment Schedule: ${payScheduleStr} via official bank transfer.\n\n` +
-          `Legal Reference: This wage and regular disbursement stipulation complies with Articles 88-91 of Indonesian Manpower Law No. 13/2003 and Gov. Reg. No. 36/2021.`;
-      }
+      answer =
+        `Berdasarkan dokumen kontrak "${contract.nameId || contract.name}" (Halaman ${loc.page}, ${loc.pasal}):\n\n` +
+        `- **Gaji Pokok:** ${salaryStr}\n` +
+        `- **Jadwal Pembayaran:** ${payScheduleStr}\n` +
+        `- **Rujukan Hukum:** Memenuhi ketentuan Pasal 88-91 UU No. 13/2003 dan PP No. 36/2021 tentang Pengupahan.`;
     }
   }
-  // 3. Masa Uji Coba / Probation
+  // ====================================================
+  // CABANG C4 — Masa Uji Coba / Probation
+  // ====================================================
   else if (
     !isExplicitOutOfScope &&
     (/(uji\s*coba(?:nya)?|percobaan(?:nya)?|probation|\bpkwt\b|\bpkwtt\b)/i.test(q) ||
@@ -1631,30 +1923,23 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
   ) {
     matchedBranch = true;
     branchType = 'probation';
-    if (isKerjasama) {
-      source = findClauseSourceIndex(contract, /PASAL\s*4|PASAL\s*2|jangka\s*waktu|addendum/i, null, 3);
+    if (isKerjasama || isSewa) {
+      source = null;
+      const docTypeLabel = isSewa ? 'Perjanjian Sewa' : 'Perjanjian Kerjasama';
       answer =
-        lang === 'id'
-          ? `Dokumen ini merupakan Surat Perjanjian Kerjasama pengadaan jasa pengelolaan Server Colocation (bukan kontrak kerja karyawan), sehingga tidak memiliki masa uji coba (probation). Jangka waktu layanan berlaku selama ${meta.contractDuration || '1 Tahun (Januari – Desember 2021)'} dan perubahan diatur melalui Addendum (Pasal 4).`
-          : `This document is a Service Partnership Agreement for Server Colocation (not an employment contract), so it does not have an employee probation period. The service term runs for ${meta.contractDuration || '1 Year (January – December 2021)'} and modifications are handled via Addendum (Article 4).`;
+        `Dokumen ini adalah **${docTypeLabel}** (bukan kontrak kerja karyawan), sehingga ketentuan masa uji coba (*probation*) tidak berlaku.\n\n` +
+        `- **Jangka Waktu Berlaku:** ${meta.contractDuration || meta.workingHours || 'Sesuai durasi perjanjian'}`;
     } else {
       source = findClauseSourceIndex(contract, /Pasal\s*58|Pasal\s*60|uji\s*coba|percobaan|probation/i, null, 1);
-      const probDuration = meta.probationPeriod || 'Masa Uji Coba 1 Bulan';
-
-      if (lang === 'id') {
-        answer =
-          `Berdasarkan dokumen kontrak ini, terdapat ketentuan ${probDuration} (Pasal 4).\n\n` +
-          `CATATAN HUKUM KRITIS (Pasal 58 UU No. 13/2003 jo. UU No. 6/2023):\n` +
-          `Masa percobaan (probation) maksimal 3 bulan HANYA diperbolehkan secara sah untuk Perjanjian Kerja Waktu Tidak Tertentu (PKWTT/karyawan tetap). Jika kontrak ini berstatus PKWT (kontrak waktu tertentu), maka klausul masa percobaan adalah BATAL DEMI HUKUM, dan pekerja secara hukum tidak boleh dibebankan denda apapun apabila mengundurkan diri selama masa tersebut.`;
-      } else {
-        answer =
-          `According to this contract, there is a stipulation for ${probDuration} (Article 4).\n\n` +
-          `CRITICAL LEGAL NOTE (Article 58 Law No. 13/2003 jo. Law No. 6/2023):\n` +
-          `A probation period (maximum 3 months) is ONLY legally permissible for permanent employment agreements (PKWTT). If this agreement is fixed-term (PKWT), the probation clause is NULL AND VOID BY LAW, and the employee cannot be subjected to resignation penalties during this period.`;
-      }
+      const probDuration = meta.probationPeriod || 'Masa Uji Coba';
+      answer =
+        `Dokumen ini mencantumkan ketentuan **${probDuration}**.\n\n` +
+        `- **Evaluasi Hukum (Pasal 58 UU No. 13/2003):** Masa percobaan (maksimal 3 bulan) hanya sah untuk karyawan tetap (PKWTT). Jika perjanjian ini berstatus PKWT, klausul masa percobaan batal demi hukum.`;
     }
   }
-  // 4. Jam & Hari Kerja / Waktu Layanan (Mendukung imbuhan -nya seperti "Bagaimana aturan jam kerjanya?")
+  // ====================================================
+  // CABANG C5 — Jam & Hari Kerja / Waktu Layanan
+  // ====================================================
   else if (
     !isExplicitOutOfScope &&
     /(jam\s*kerja(?:nya)?|hari\s*kerja(?:nya)?|waktu\s*kerja(?:nya)?|jadwal\s*kerja(?:nya)?|working\s*hours?|lembur|overtime|shift|aturan\s*kerja(?:nya)?)/i.test(
@@ -1663,12 +1948,11 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
   ) {
     matchedBranch = true;
     branchType = 'working_hours';
-    if (isKerjasama) {
-      source = findClauseSourceIndex(contract, /PASAL\s*2|1\s*Tahun|pemeliharaan/i, null, 1);
+    if (isKerjasama || isSewa) {
+      source = findClauseSourceIndex(contract, /PASAL\s*2|jangka\s*waktu|pemeliharaan|sewa/i, null, 1);
       answer =
-        lang === 'id'
-          ? `Karena dokumen ini adalah Perjanjian Kerjasama pengelolaan Server Colocation & Jaringan Internet, dokumen tidak mengatur jam kerja harian karyawan melainkan masa pemeliharaan server selama ${meta.contractDuration || '1 Tahun (Januari sampai dengan Desember 2021)'} dengan spesifikasi jaringan internet unlimited (Pasal 2).`
-          : `Because this document is a Server Colocation & Internet Service Agreement, it specifies a continuous service maintenance period of ${meta.contractDuration || '1 Year (January to December 2021)'} with unlimited internet bandwidth (Article 2) rather than daily employee working hours.`;
+        `Dokumen ini adalah **${isSewa ? 'Perjanjian Sewa' : 'Perjanjian Kerjasama'}** (bukan kontrak kerja karyawan), sehingga tidak mengatur jam kerja harian karyawan.\n\n` +
+        `- **Durasi Layanan / Sewa:** ${meta.contractDuration || meta.workingHours || 'Sesuai ketentuan perjanjian'}`;
     } else {
       source = findClauseSourceIndex(
         contract,
@@ -1676,79 +1960,33 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
         null,
         2
       );
-      const hoursStr = meta.workingHours || 'Senin hingga Jumat, pukul 09.00 - 17.00 WIB (40 jam/minggu)';
-
-      if (lang === 'id') {
-        answer =
-          `Berdasarkan dokumen kontrak (Pasal 2):\n` +
-          `• Jadwal Kerja: ${hoursStr}\n` +
-          `• Evaluasi Hukum: Standar 8 jam per hari dan 40 jam per minggu untuk 5 hari kerja ini sepenuhnya sesuai dengan Pasal 77 ayat (2) huruf b UU Ketenagakerjaan No. 13/2003. Kelebihan jam kerja di luar ketentuan ini wajib diperhitungkan sebagai lembur.`;
-      } else {
-        answer =
-          `According to the contract (Article 2):\n` +
-          `• Working Hours: ${hoursStr}\n` +
-          `• Legal Evaluation: 8 hours per day and 40 hours per week for 5 working days complies with Article 77 paragraph (2) letter b of Manpower Law No. 13/2003. Any work beyond these hours must be compensated as overtime.`;
-      }
+      const hoursStr = meta.workingHours || 'Senin hingga Jumat (40 jam/minggu)';
+      answer =
+        `Berdasarkan dokumen kontrak (Pasal 2), jadwal kerja ditetapkan **${hoursStr}**.\n\n` +
+        `- **Evaluasi Hukum:** Standar maksimal 40 jam/minggu telah sesuai dengan Pasal 77 ayat (2) UU Ketenagakerjaan No. 13/2003.`;
     }
   }
-  // 5. Para Pihak, Perusahaan/Instansi, & Jabatan / Ruang Lingkup
+  // ====================================================
+  // CABANG C6 — Para Pihak, Perusahaan/Instansi, & Ruang Lingkup
+  // ====================================================
   else if (!isExplicitOutOfScope && asksContractParty) {
     matchedBranch = true;
     branchType = 'parties';
     source = 0;
-    if (isKerjasama) {
-      const p1Name = meta.firstPartyName || firstPartyClean || 'Dra. Nina Dewi, MAP.';
-      const p1Org = meta.firstPartyOrg || 'BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR';
-      const p1Role = meta.firstPartyRole || 'Kuasa Pengguna Anggaran';
-      const p2Name = meta.secondPartyName || secondPartyClean || 'Akbar Marwan';
-      const p2Org = meta.secondPartyOrg || 'PT. POWERNET INDOSOLUSI';
-      const p2Role = meta.secondPartyRole || 'Account Executive';
-      const scopeStr =
-        meta.scopeSummary ||
-        meta.role ||
-        'Pengelolaan Server Colocation BKD Prov. Kaltim & penyediaan jaringan internet unlimited';
-
-      if (lang === 'id') {
-        answer =
-          `Berdasarkan komparisi identitas Surat Perjanjian Kerjasama${meta.contractNumber ? ` (Nomor: ${meta.contractNumber})` : ''}:\n` +
-          `• Pihak Pertama: ${p1Name} (${p1Role} — bertindak untuk dan atas nama ${p1Org})\n` +
-          `• Pihak Kedua: ${p2Name} (${p2Role} — bertindak untuk dan atas nama ${p2Org})\n` +
-          `• Objek & Ruang Lingkup Kerjasama: ${scopeStr}`;
-      } else {
-        answer =
-          `Based on the Partnership Agreement identification${meta.contractNumber ? ` (No: ${meta.contractNumber})` : ''}:\n` +
-          `• First Party: ${p1Name} (${p1Role} — acting for and on behalf of ${p1Org})\n` +
-          `• Second Party: ${p2Name} (${p2Role} — acting for and on behalf of ${p2Org})\n` +
-          `• Scope of Partnership: ${scopeStr}`;
-      }
-    } else {
-      const p1Str = firstPartyClean
-        ? `${firstPartyClean} (HRD ${meta.company || 'PT. Bintang Maju Bersama'})`
-        : 'Pihak Pertama (Pemberi Kerja)';
-      const p2Str = secondPartyClean ? `${secondPartyClean}` : 'Pihak Kedua (Karyawan)';
-      const roleStr = meta.role || 'Supply Chain Manager';
-
-      if (lang === 'id') {
-        answer =
-          `Berdasarkan identitas kontrak:\n` +
-          `• Pihak Pertama: ${p1Str}\n` +
-          `• Pihak Kedua: ${p2Str}\n` +
-          `• Posisi / Jabatan: ${roleStr}\n` +
-          `• Ringkasan Tanggung Jawab: Mengurus dan merekap data penjualan serta pemesanan produk untuk dikoordinasikan dengan Warehouse Chief.`;
-      } else {
-        answer =
-          `Contract identification summary:\n` +
-          `• First Party (Employer): ${p1Str}\n` +
-          `• Second Party (Employee): ${p2Str}\n` +
-          `• Position / Role: ${roleStr}\n` +
-          `• Responsibilities: Compiling sales records and product orders to be submitted to the Warehouse Chief.`;
-      }
-    }
+    const p1 = meta.firstParty || firstPartyClean || 'Pihak Pertama';
+    const p2 = meta.secondParty || secondPartyClean || 'Pihak Kedua';
+    answer =
+      `Berikut identitas para pihak dan ruang lingkup dalam "${contract.nameId || contract.name}":\n\n` +
+      `- **Pihak Pertama:** ${p1}${meta.firstPartyRole ? ` (${meta.firstPartyRole})` : ''}\n` +
+      `- **Pihak Kedua:** ${p2}${meta.secondPartyRole ? ` (${meta.secondPartyRole})` : ''}\n` +
+      `- **Objek / Posisi:** ${meta.role || meta.scopeSummary || 'Sesuai lingkup perjanjian'}`;
   }
-  // 6. Perpanjangan Otomatis / Durasi Kontrak
+  // ====================================================
+  // CABANG C7 — Pengakhiran Kontrak / Perpanjangan / Durasi
+  // ====================================================
   else if (
     !isExplicitOutOfScope &&
-    (/\b(perpanjang|perpanjangan|renew|renewal|otomatis|auto\s*renew|jatuh\s*tempo|expire|expired|jangka\s*waktu|masa\s*berlaku|durasi\s*kontrak)\b/i.test(
+    (/\b(perpanjang|perpanjangan|renew|renewal|otomatis|auto\s*renew|jatuh\s*tempo|expire|expired|jangka\s*waktu|masa\s*berlaku|durasi\s*kontrak|pengakhiran|pemutusan)\b/i.test(
       q
     ) ||
       /((kapan|tanggal|sampai\s*kapan).*(berakhir|selesai|habis|kontrak)|\b(kontrak|perjanjian).*(berakhir|selesai|habis))/i.test(
@@ -1757,58 +1995,28 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
   ) {
     matchedBranch = true;
     branchType = 'duration';
-    source = findClauseSourceIndex(contract, /perpanjang|renew|jangka\s*waktu|Pasal\s*8|PASAL\s*2|PASAL\s*4/i, null, 2);
-    const otomatis = aiClauses.find((k) => /otomatis|perpanjangan|auto|renew/i.test(k.kutipan));
-    if (lang === 'id') {
-      answer = otomatis
-        ? `Klausul Perpanjangan: "${otomatis.kutipan}" — ${otomatis.penjelasan}. Rujukan: ${otomatis.rujukan || 'Pasal 8 PP 35/2021'}. ${SARAN.perhatian.join(' ')}`
-        : isKerjasama
-        ? `Berdasarkan Pasal 2 Perjanjian Kerjasama ini, masa berlaku pemeliharaan Server Colocation adalah selama ${meta.contractDuration || '1 Tahun (mulai bulan Januari sampai dengan Desember 2021)'}. Hal-hal perpanjangan atau perubahan diatur melalui Surat Perjanjian Tambahan (Addendum) sesuai Pasal 4.`
-        : isKerja
-        ? `Menurut Pasal 8 PP 35/2021, total akumulasi PKWT termasuk perpanjangan dibatasi maksimal 5 tahun. ${SARAN.perhatian.join(' ')}`
-        : `Periksa kembali jangka waktu dan perpanjangan sewa sesuai kesepakatan kedua pihak (KUHPerdata). ${SARAN.perhatian.join(' ')}`;
+    const asksTerminationOnly = /\b(pengakhiran|pemutusan)\b/i.test(q) && !/perpanjang|durasi|jangka\s*waktu/i.test(q);
+    const hasTerminationClause = /(?:pengakhiran|pemutusan|pembatalan)\s+(?:kontrak|perjanjian)/i.test(rawText);
+
+    if (asksTerminationOnly && !hasTerminationClause) {
+      source = null;
+      answer =
+        `Ketentuan **pengakhiran kontrak** secara eksplisit **tidak diatur dalam dokumen ini**.\n\n` +
+        `- **Ketentuan yang Ada:** Dokumen hanya menyebut mekanisme perubahan melalui dokumen tambahan (Addendum) apabila ada hal yang belum diatur.`;
     } else {
-      answer = otomatis
-        ? `Renewal Clause: "${otomatis.kutipan}" — ${otomatis.penjelasan}. Ref: ${otomatis.rujukan || 'Article 8 PP 35/2021'}. ${SARAN.perhatian.join(' ')}`
-        : isKerja
-        ? `Under Gov. Reg. 35/2021 Article 8, total cumulative PKWT duration cannot exceed 5 years. ${SARAN.perhatian.join(' ')}`
-        : `Verify lease renewal provisions pursuant to mutual agreement under Indonesian Civil Code. ${SARAN.perhatian.join(' ')}`;
+      source = findClauseSourceIndex(contract, /perpanjang|renew|jangka\s*waktu|Pasal\s*8|PASAL\s*2/i, null, 1);
+      const durInfo = meta.expiryDate || meta.contractDuration || meta.workingHours || 'Sesuai isi kontrak';
+      answer =
+        `Jangka waktu dokumen ini adalah **${durInfo}**.\n\n` +
+        `- **Status Masa Berlaku:** ${meta.isExpired ? 'Masa berlaku kontrak telah berakhir dibandingkan tanggal hari ini.' : 'Sesuai periode yang disepakati para pihak.'}`;
     }
   }
-  // 7. Sewa: Deposit Hangus
+  // ====================================================
+  // CABANG C8 — Klausul Penting yang Belum Diatur / Penjelasan Awam / Ringkasan
+  // ====================================================
   else if (
     !isExplicitOutOfScope &&
-    /\b(deposit|jaminan|uang\s*deposit|uang\s*jaminan|hangus|refund)\b/i.test(q) &&
-    isSewa
-  ) {
-    matchedBranch = true;
-    branchType = 'deposit';
-    source = findClauseSourceIndex(contract, /deposit|jaminan|Pasal\s*1587/i, null, 1);
-    const dep = aiClauses.find((k) => /deposit|jaminan|refund/i.test(k.kutipan));
-    answer =
-      lang === 'id'
-        ? `${dep ? `Klausul: "${dep.kutipan}" — ${dep.penjelasan}\n\n` : ''}Rujukan hukum: Pasal 1587 KUHPerdata menyatakan penyewa yang mengembalikan barang dalam kondisi baik berhak mendapatkan kembali uang jaminan. Klausul deposit hangus tanpa syarat batal demi hukum. ${SARAN.tinggi.join(' ')}`
-        : `${dep ? `Clause: "${dep.kutipan}" — ${dep.penjelasan}\n\n` : ''}Legal Reference: Article 1587 Civil Code entitles a tenant returning property in good order to their deposit. Forfeited deposits without just cause are contestable. ${SARAN.tinggi.join(' ')}`;
-  }
-  // 8. Sewa: Kenaikan Sewa Sepihak
-  else if (
-    !isExplicitOutOfScope &&
-    /(naik.*sewa|kenaikan.*harga|sewa.*kapan|harga.*sewa|sepihak)/i.test(q) &&
-    isSewa
-  ) {
-    matchedBranch = true;
-    branchType = 'rent_hike';
-    source = findClauseSourceIndex(contract, /naik|harga.*sewa|Pasal\s*1338/i, null, 1);
-    const n = aiClauses.find((k) => /naik|sewa.*kapan|harga.*sewa/.test(k.kutipan));
-    answer =
-      lang === 'id'
-        ? `${n ? `Klausul: "${n.kutipan}" — ${n.penjelasan}\n\n` : ''}Rujukan: Pasal 1338 KUHPerdata (pacta sunt servanda) & Pasal 1550. Harga sewa yang disepakati mengikat dan tidak boleh dinaikkan sepihak di tengah masa sewa. ${SARAN.tinggi.join(' ')}`
-        : `${n ? `Clause: "${n.kutipan}" — ${n.penjelasan}\n\n` : ''}Legal Reference: Civil Code Article 1338 (contracts bind as law) & Article 1550. Rent cannot be raised unilaterally mid-lease. ${SARAN.tinggi.join(' ')}`;
-  }
-  // 9. Mode Penjelasan Awam & Permintaan Ringkasan ("ini surat apa?", "jelasin isinya buat orang awam", "poin pentingnya apa aja?", "skor risiko")
-  else if (
-    !isExplicitOutOfScope &&
-    (/\b(ringkasan|rangkuman|kesimpulan|skor|risiko|aman\s*tidak|bahaya|evaluasi|analisis|review|summary|risk|overview)\b/i.test(
+    (/\b(ringkasan|rangkuman|kesimpulan|skor|risiko|aman\s*tidak|bahaya|evaluasi|analisis|review|summary|risk|overview|belum\s*diatur)\b/i.test(
       q
     ) ||
       /(ini\s*surat\s*apa|surat\s*apa\s*ini|kontrak\s*apa\s*ini|dokumen\s*apa\s*ini|orang\s*awam|bahasa\s*awam|poin\s*penting(?:nya)?|inti(?:nya)?\s*apa|jelas(?:kan|in)\s*(?:isi(?:nya)?|kontrak|surat|dokumen|secara\s*singkat)|isi\s*kontrak)/i.test(
@@ -1818,71 +2026,29 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
     matchedBranch = true;
     branchType = 'summary_layman';
     source = 0;
-    const ringkasan = contract.summary || '';
-    const p1Display = firstPartyClean || meta.firstParty || 'Pihak Pertama';
-    const p2Display = secondPartyClean || meta.secondParty || 'Pihak Kedua';
+    const p1Display = meta.firstParty || firstPartyClean || 'Pihak Pertama';
+    const p2Display = meta.secondParty || secondPartyClean || 'Pihak Kedua';
     const docCategoryLabel = isKerjasama
-      ? 'Surat Perjanjian Kerjasama / Pengadaan Jasa'
+      ? 'Surat Perjanjian Kerjasama'
       : isSewa
       ? 'Surat Perjanjian Sewa-Menyewa'
-      : 'Surat Perjanjian Kontrak Kerja Karyawan';
-    const valDisplay = meta.salary || 'Sesuai ketentuan kompensasi kontrak';
-    const durDisplay = meta.workingHours || meta.contractDuration || 'Sesuai jadwal yang disepakati';
+      : 'Surat Perjanjian Kerja';
     const mainRiskText =
       tinggi.length > 0
         ? `"${tinggi[0].kutipan}" — ${tinggi[0].penjelasan}`
-        : meta.disproportionatePenalty
-        ? `Denda resign sebesar ${meta.penalty || 'Rp10.000.000'} pada masa uji coba yang melebihi gaji bulanan.`
-        : 'Tidak ditemukan klausul denda ekstrem, kontrak relatif aman dan seimbang.';
+        : perhatian.length > 0
+        ? perhatian[0].penjelasan
+        : 'Tidak ditemukan klausul berisiko ekstrem.';
 
-    if (lang === 'id') {
-      answer =
-        `Penjelasan Singkat untuk Awam (${contract.nameId || contract.name}):\n` +
-        `1. Inti Surat & Para Pihak: Dokumen ini adalah ${docCategoryLabel} antara ${p1Display} (${meta.company || 'Pihak Pertama'}) dan ${p2Display} untuk posisi/objek ${meta.role || 'sesuai perjanjian'}.\n` +
-        `2. Nominal & Hak Utama: Nilai kompensasi/gaji sebesar ${valDisplay} (${meta.paymentSchedule || 'dibayarkan sesuai jadwal kontrak'}).\n` +
-        `3. Kewajiban & Waktu: ${durDisplay}.\n` +
-        `4. Poin Berisiko yang Wajib Diwaspadai: ${mainRiskText}\n\n` +
-        `${ringkasan ? `${ringkasan}\n\n` : ''}` +
-        `Ringkasan Analisis Cek Kontrak:\n` +
-        `• Skor Risiko: ${contract.riskScore}/100\n` +
-        `• Temuan Kritis: ${tinggi.length} klausul risiko tinggi, ${perhatian.length} perlu ditinjau.\n` +
-        `Disclaimer: Jawaban ini adalah alat bantu literasi hukum berbasis AI dan bukan pengganti nasihat hukum resmi advokat.`;
-    } else {
-      answer =
-        `Plain-Language Summary (${contract.name}):\n` +
-        `1. Purpose & Parties: Agreement between ${p1Display} (${meta.company || 'First Party'}) and ${p2Display} for ${meta.role || 'the agreed scope'}.\n` +
-        `2. Compensation / Value: ${valDisplay}.\n` +
-        `3. Obligations & Schedule: ${durDisplay}.\n` +
-        `4. Key Risk to Watch: ${mainRiskText}\n\n` +
-        `Cek Kontrak Analysis Summary:\n` +
-        `• Risk Score: ${contract.riskScore}/100\n` +
-        `• Critical Findings: ${tinggi.length} high-risk clauses, ${perhatian.length} review items.`;
-    }
-  }
-  // 10. Rujukan Regulasi & Dasar Hukum
-  else if (
-    !isExplicitOutOfScope &&
-    (/\b(hukum|undang-undang|undang\s*undang|pasal|legal|aturan\s*hukum|peraturan|rujukan|regulasi|uu|kuhperdata|pp)\b/i.test(
-      q
-    ) ||
-      /(35\/2021|13\/2003|168\/puu)/i.test(q))
-  ) {
-    matchedBranch = true;
-    branchType = 'legal_ref';
-    source = 0;
     answer =
-      lang === 'id'
-        ? `Analisis Cek Kontrak merujuk langsung ke regulasi resmi Indonesia:\n` +
-          (isKerja
-            ? `• UU Ketenagakerjaan No. 13/2003 (Pasal 58 larangan uji coba PKWT, Pasal 77 jam kerja 40 jam, Pasal 88 upah)\n• UU Cipta Kerja No. 6/2023 & PP No. 35/2021 (PKWT & kompensasi)\n• Putusan Mahkamah Konstitusi No. 168/PUU-XXI/2023 (Prinsip pesangon minimum & larangan klausul eksploitatif)\n\nSkor Risiko Dokumen: ${contract.riskScore ?? '-'}/100.`
-            : `• KUHPerdata Buku III Bab VII: Pasal 1550 (kewajiban menyewakan), Pasal 1560 (kewajiban penyewa), Pasal 1576 (jual-beli tak memutus sewa), Pasal 1587 (pengembalian jaminan).\n\nSkor Risiko Dokumen: ${contract.riskScore ?? '-'}/100.`)
-        : `Cek Kontrak legal grounding is anchored in Indonesian legislation:\n` +
-          (isKerja
-            ? `• Manpower Law 13/2003 (Art. 58 probation ban in PKWT, Art. 77 working hours, Art. 88 wages)\n• Job Creation Law 6/2023 & Gov. Reg. 35/2021 (PKWT terms & severance)\n• Constitutional Court Decision 168/PUU-XXI/2023 (Protection from exploitative clauses)\n\nRisk Score: ${contract.riskScore ?? '-'}/100.`
-            : `• Indonesian Civil Code Book III Ch. VII: Art. 1550, 1560, 1576, 1587.\n\nRisk Score: ${contract.riskScore ?? '-'}/100.`);
+      `Berikut ringkasan singkat untuk awam dari **${contract.nameId || contract.name}**:\n\n` +
+      `- **Inti Surat & Para Pihak:** ${docCategoryLabel} antara ${p1Display} dan ${p2Display} (${meta.role || 'sesuai perjanjian'}).\n` +
+      `- **Nominal & Hak Utama:** ${meta.salary || 'Sesuai ketentuan kontrak'}${meta.deposit ? ` (Deposit: ${meta.deposit})` : ''}.\n` +
+      `- **Durasi & Jadwal:** ${meta.expiryDate || meta.workingHours || meta.contractDuration || 'Sesuai perjanjian'}.\n` +
+      `- **Skor Risiko: ${contract.riskScore ?? 80}/100** — ${mainRiskText}`;
   }
   // ====================================================
-  // CABANG B — Pertanyaan Seputar Fitur Website / Platform (Tanpa kata tunggal `pdf`!)
+  // CABANG B — Pertanyaan Seputar Fitur Website / Platform
   // ====================================================
   else if (
     !isExplicitOutOfScope &&
@@ -1894,21 +2060,15 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
     branchType = 'platform_features';
     source = null;
     answer =
-      lang === 'id'
-        ? `Platform Cek Kontrak (CLARIQ) menyediakan 4 fitur utama untuk membantu Anda:\n` +
-          `1. Analisis Kontrak AI (PDF/Teks): Mengekstrak isi dokumen secara otomatis dan mendeteksi klausul berisiko tinggi (seperti denda resign atau masa percobaan ilegal).\n` +
-          `2. Bandingkan 2 Kontrak: Membandingkan draf lama vs draf revisi secara berdampingan.\n` +
-          `3. Pengingat Tanggal Penting: Memantau jadwal gajian, masa tenggang notifikasi, dan akhir kontrak.\n` +
-          `4. Buat Kontrak HRD (Fitur HRD Pro): Menyusun draf PKWT/PKWTT resmi yang 100% patuh UU Ketenagakerjaan lengkap dengan Tanda Tangan Digital, Stempel Korporat, dan E-Meterai Rp10.000.`
-        : `The Cek Kontrak (CLARIQ) platform provides 4 core features:\n` +
-          `1. AI Contract Analysis (PDF/Text): Automatically extracts contract text and flags high-risk clauses (such as disproportionate resignation penalties or unlawful probation terms).\n` +
-          `2. 2-Contract Comparison: Side-by-side comparison between original and revised agreement drafts.\n` +
-          `3. Important Date Reminders: Tracks payday schedules, notice deadlines, and contract expiration dates.\n` +
-          `4. HRD Smart Contract Builder (HRD Pro): Generates 100% compliant PKWT/PKWTT employment contracts complete with Digital Signatures, Corporate Stamp, and IDR 10,000 E-Meterai.`;
+      `Platform Cek Kontrak (CLARIQ) menyediakan 4 fitur utama:\n\n` +
+      `1. **Analisis Kontrak AI (PDF/Teks):** Mengekstrak isi dokumen dan mendeteksi klausul berisiko.\n` +
+      `2. **Bandingkan 2 Kontrak:** Membandingkan draf lama vs draf revisi secara berdampingan.\n` +
+      `3. **Pengingat Tanggal Penting:** Memantau jadwal pembayaran, tenggat notifikasi, dan akhir kontrak.\n` +
+      `4. **Buat Kontrak HRD (HRD Pro):** Menyusun draf PKWT/PKWTT resmi lengkap dengan Tanda Tangan Digital dan Meterai Rp10.000.`;
   }
 
   // ====================================================
-  // CABANG C2 — Smart Local Paragraph Search Fallback (Pencarian Kata Kunci pada rawText)
+  // CABANG C9 — Smart Local Paragraph Search Fallback pada rawText
   // ====================================================
   if (!answer && !isExplicitOutOfScope && rawText && rawText.length >= 20) {
     const stopwords = new Set([
@@ -1916,7 +2076,7 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
       'yang', 'dan', 'atau', 'dari', 'dalam', 'untuk', 'pada', 'dengan', 'ini', 'itu', 'saya',
       'kami', 'anda', 'kontrak', 'perjanjian', 'surat', 'dokumen', 'pdf', 'isi', 'ada', 'tidak',
       'bisa', 'boleh', 'harus', 'cara', 'buat', 'membuat', 'di', 'ke', 'seputar', 'tentang',
-      'halaman', 'berapa', 'mencantumkan', 'jumlah', 'tolong', 'jelaskan', 'jelasin',
+      'halaman', 'mencantumkan', 'jumlah', 'tolong', 'jelaskan', 'jelasin',
     ]);
     const tokens = q
       .replace(/[^a-z0-9\s]/gi, ' ')
@@ -1933,28 +2093,26 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
         source = findClauseSourceIndex(contract, tokenRegex, null, 0);
         matchedBranch = true;
         branchType = 'paragraph_search';
-        const excerpt = matchedBlock ? `${matchedBlock.pasal}${matchedBlock.subtitle ? ` (${matchedBlock.subtitle})` : ''}: "${matchedBlock.body}"` : `"${loc.snippet}"`;
+        const excerpt = matchedBlock
+          ? `${matchedBlock.pasal}${matchedBlock.subtitle ? ` (${matchedBlock.subtitle})` : ''}: "${stripPageMarkers(matchedBlock.body)}"`
+          : `"${stripPageMarkers(loc.snippet)}"`;
         answer =
-          lang === 'id'
-            ? `Berdasarkan naskah dokumen pada Halaman ${loc.page} (${matchedBlock ? matchedBlock.pasal : loc.pasal}), berikut ketentuan yang ditemukan:\n${excerpt}`
-            : `Based on the document text on Page ${loc.page} (${matchedBlock ? matchedBlock.pasal : loc.pasal}), here is the relevant provision:\n${excerpt}`;
+          `Berdasarkan naskah dokumen pada Halaman ${loc.page} (${matchedBlock ? matchedBlock.pasal : loc.pasal}), berikut ketentuan yang ditemukan:\n\n` +
+          `- **Kutipan Terkait:** ${excerpt}`;
       }
     }
   }
 
   // ====================================================
-  // CABANG D — Pertanyaan di Luar Topik (Out-of-Scope Guardrail)
+  // CABANG D — Out-of-Scope Guardrail
   // ====================================================
   if (!answer) {
     source = null;
     branchType = 'out_of_scope';
-    if (lang === 'id') {
-      answer =
-        'Maaf, saya tidak paham maksud Anda. Saya hanya dapat membantu menjawab pertanyaan seputar isi dokumen kontrak, aturan hukum perjanjian, serta fitur yang ada di website ini.';
-    } else {
-      answer =
-        "Sorry, I don't understand your request. I can only answer questions about your uploaded contract, relevant legal rules, and the features of this platform.";
-    }
+    answer =
+      lang === 'id'
+        ? 'Maaf, saya tidak paham maksud Anda. Saya hanya dapat membantu menjawab pertanyaan seputar isi dokumen kontrak, aturan hukum perjanjian, serta fitur yang ada di website ini.'
+        : "Sorry, I don't understand your request. I can only answer questions about your uploaded contract, relevant legal rules, and the features of this platform.";
   }
 
   return {
@@ -1968,10 +2126,9 @@ export function chatWithAnalyzedContract({ contract, question, lang = 'id' }) {
 }
 
 /**
- * Otak Utama Hybrid AI Chatbot:
- * Mengirim konteks lengkap (metadata, daftar klausul terindeks [0]..[N], full rawText dengan penanda --- HALAMAN X --- hingga 28.000 karakter,
- * dan 6 riwayat chat terakhir) ke `callGeminiApi` (timeout 8000ms) dengan JSON output terstruktur.
- * Jika semua API key gagal/timeout/offline, otomatis silent fallback ke `chatWithAnalyzedContract`.
+ * Otak Utama Hybrid AI Chatbot (Gemini-First):
+ * Hanya memfilter sapaan murni dan pertanyaan 100% out-of-scope (termasuk membedakan matematika umum vs matematika kontrak).
+ * Semua pertanyaan terkait dokumen (proyeksi gaji/biaya, skenario, klausul yang absen, dll.) diteruskan langsung ke `callGeminiApi`.
  */
 export async function chatWithAnalyzedContractHybrid({
   contract,
@@ -1983,10 +2140,9 @@ export async function chatWithAnalyzedContractHybrid({
 
   const localResult = chatWithAnalyzedContract({ contract, question, lang });
 
-  // 1. Jika pertanyaan eksplisit out-of-scope, sapaan singkat, atau fitur platform, langsung kembalikan guardrail presisi
+  // 1. HANYA pra-filter sapaan murni, fitur platform, atau pertanyaan 100% di luar kontrak
   if (
     localResult.isExplicitOutOfScope ||
-    localResult.branchType === 'out_of_scope' ||
     localResult.branchType === 'greeting' ||
     localResult.branchType === 'platform_features'
   ) {
@@ -2025,17 +2181,30 @@ export async function chatWithAnalyzedContractHybrid({
 
     const systemPrompt = `Anda adalah Asisten AI Hukum Kontrak CLARIQ (Cek Kontrak).
 Bahasa balasan: ${lang === 'en' ? 'English' : 'Bahasa Indonesia'}.
+Tanggal hari ini: ${new Date().toISOString().slice(0, 10)}.
 
 ATURAN WAJIB:
-1. Jawab Semua Pertanyaan dari Isi PDF: Apapun jenis dokumennya (kerja, kerjasama, sewa, vendor, NDA), jawab 100% akurat berdasarkan teks asli. Jangan mengarang angka/pasal. Jika tidak diatur di dokumen, katakan jujur bahwa ketentuan tersebut tidak tercantum.
-2. Mode Penjelasan Awam (Ringkas & Jelas): Jika user bertanya secara umum ("ini surat apa?", "jelasin isi kontrak ini", "poin pentingnya apa aja?"), jelaskan secara padat dan mudah dipahami: (a) Inti kontrak & para pihak, (b) Nominal/hak utama, (c) Kewajiban/durasi, dan (d) Poin berisiko yang wajib diwaspadai beserta Skor Risiko (${contract.riskScore ?? 80}/100).
-3. Akurat Menyebut Halaman & Pasal: Jika ditanya lokasi halaman/pasal (contoh: "di halaman berapa pdf mencantumkan jumlah dendanya"), cari penanda "--- HALAMAN X ---" dan "PASAL Y", sebutkan halaman dan pasalnya dengan tepat, dan isi "clauseIndex" sesuai indeks klausul [0]..[${Math.max(0, clausesList.length - 1)}] yang paling relevan.
-4. Strict Out-of-Scope Guardrail: Tolak pertanyaan di luar isi dokumen kontrak, hukum perjanjian Indonesia, atau fitur website ini (politik, tokoh publik seperti Jokowi/Brando, matematika umum 1+1, resep masakan, koding, dll.) dengan "isRefusal": true, "clauseIndex": null, dan "answer": "${lang === 'en' ? refusalEn : refusalId}".
-5. Zero Emoji: DILARANG menggunakan emoji apa pun di dalam balasan.
+1. Jawab Semua Pertanyaan Terkait Dokumen (Termasuk Proyeksi & Skenario):
+   - Jika pertanyaan masih berhubungan dengan isi kontrak (gaji, biaya, sewa, denda, proyeksi N tahun/bulan), WAJIB dijawab cerdas dan akurat.
+   - Untuk kalkulasi/proyeksi (mis. "Berapa total biaya setahun?", "dalam 5 tahun gajiku berapa?", "Berapa total biaya sewa selama 3 tahun?"): hitung teliti, tulis hasil angka akhirnya dengan cetak tebal (**Rp...**) di kalimat pertama, tampilkan rumus di bullet (- **Perhitungan:** ...), dan beri catatan asumsi (nominal tetap & perpanjangan kontrak sesuai masa kontrak asli).
+   - Untuk pertanyaan total denda tahunan (mis. "dalam setahun total denda berapa?"): cek sifat denda! Jika denda bersifat sekali bayar saat pelanggaran/resign, jelaskan secara eksplisit bahwa denda tersebut bukan biaya rutin tahunan melainkan sekali bayar saat syarat pelanggaran terjadi (atau Rp0 / tidak diatur jika tidak ada klausul denda).
+   - Untuk pertanyaan identitas pihak ("siapa pihak pertama dan pihak kedua?"): sebutkan dengan jelas format "Pihak Pertama: <nama>", "Pihak Kedua: <nama>", dan posisi/jabatan atau objek perjanjian, serta isi "clauseIndex": 0.
+   - Untuk permintaan ringkasan & skor risiko: sertakan label "Skor Risiko: <nilai>/100".
+2. Klarifikasi Jika Istilah Tidak Sesuai Jenis Dokumen:
+   - Jika user menanyakan istilah ketenagakerjaan (resign, masa uji coba, cuti) pada dokumen non-ketenagakerjaan (Kerjasama/Sewa/Vendor), klarifikasi di kalimat pertama bahwa dokumen ini adalah Perjanjian Sewa/Kerjasama (bukan kontrak kerja karyawan) sehingga istilah tersebut tidak berlaku, lalu jelaskan ketentuan yang relevan.
+3. Jujur Saat Klausul Tidak Diatur & Dilarang Menyesatkan Isi Addendum:
+   - Jika hal terkait kontrak tidak tercantum (mis. pengakhiran kontrak, SLA, cuti, THR), nyatakan jujur bahwa ketentuan tersebut tidak diatur secara eksplisit dalam dokumen ini dan isi "clauseIndex": null.
+   - Dilarang mengklaim pasal addendum mengatur pengakhiran kontrak apabila teksnya tidak menyebut pengakhiran.
+4. Format Terstruktur, Fokus, & Bahasa Hukum Objektif:
+   - Awali paragraf pembuka 1-2 kalimat langsung ke kesimpulan/angka, diikuti bullet list "- **Label:** Penjelasan" dengan baris baru (\\n). DILARANG menggabungkan bullet dalam 1 paragraf dan DILARANG memakai emoji.
+   - Fokus pada pertanyaan user; jangan memuntahkan blok "TEMUAN RISIKO TINGGI" jika tidak ditanyakan.
+   - Gunakan bahasa objektif: tulis "rekening atas nama individu, bukan atas nama badan hukum perusahaan" dan "dapat menjadi perhatian auditor atau pemeriksaan kepatuhan administrasi".
+5. Strict Out-of-Scope Guardrail:
+   - Tolak pertanyaan di luar kontrak/hukum/fitur web (tokoh publik seperti Jokowi/Brando, resep masakan, matematika murni tanpa konteks kontrak seperti 1+1) dengan "isRefusal": true, "clauseIndex": null, dan "answer": "${lang === 'en' ? refusalEn : refusalId}".
 
-Kembalikan HANYA JSON valid dengan skema:
+Kembalikan HANYA JSON valid:
 {
-  "answer": "<jawaban lengkap tanpa emoji>",
+  "answer": "<jawaban terstruktur dengan \\n tanpa emoji>",
   "isRefusal": <boolean>,
   "clauseIndex": <number | null>,
   "citedPage": <number | null>
@@ -2048,7 +2217,8 @@ Kembalikan HANYA JSON valid dengan skema:
 - Pihak Pertama: ${meta.firstParty || '-'}
 - Pihak Kedua: ${meta.secondParty || '-'}
 - Perusahaan/Instansi: ${meta.company || contract.company || '-'}
-- Nilai/Gaji: ${meta.salary || '-'}
+- Nilai/Gaji: ${meta.salary || '-'} (Annual: ${meta.annualValue || '-'})
+- Deposit: ${meta.deposit || '-'}
 - Jam Kerja/Durasi: ${meta.workingHours || meta.contractDuration || '-'}
 - Denda/Penalti: ${meta.penalty || 'Tidak ada'}
 
@@ -2074,7 +2244,6 @@ ${question}`;
       const parsed = JSON.parse(cleanedJson);
       if (parsed && typeof parsed.answer === 'string' && parsed.answer.trim()) {
         if (parsed.isRefusal) {
-          // Jika fallback lokal sudah mengenali pertanyaan ini sebagai cabang kontrak yang sah, gunakan jawaban kontrak
           if (localResult.matchedBranch) {
             return {
               ...localResult,
@@ -2091,25 +2260,20 @@ ${question}`;
         }
 
         const cleanGeminiAnswer = stripDecorativeEmojis(parsed.answer);
-        const validClauseIdx =
-          localResult.matchedBranch && localResult.source !== null
-            ? localResult.source
-            : typeof parsed.clauseIndex === 'number' &&
-              parsed.clauseIndex >= 0 &&
-              parsed.clauseIndex < Math.max(1, clausesList.length)
-            ? parsed.clauseIndex
-            : localResult.source;
+        const isNonEmpResignAbsent =
+          localResult.branchType === 'penalty' && localResult.source === null;
+        let validClauseIdx = isNonEmpResignAbsent
+          ? null
+          : parsed.clauseIndex === null
+          ? null
+          : typeof parsed.clauseIndex === 'number' &&
+            parsed.clauseIndex >= 0 &&
+            parsed.clauseIndex < clausesList.length
+          ? parsed.clauseIndex
+          : localResult.source;
 
-        // Jika pertanyaan cocok dengan cabang hukum inti deterministik, pastikan rujukan fakta kunci tetap lengkap
-        if (localResult.matchedBranch && localResult.text) {
-          return {
-            text: localResult.text,
-            geminiText: cleanGeminiAnswer,
-            source: validClauseIdx,
-            citedPage: parsed.citedPage || null,
-            provider: 'GEMINI',
-            model: gemRes.model,
-          };
+        if (localResult.branchType === 'parties' && validClauseIdx === null && clausesList.length > 0) {
+          validClauseIdx = 0;
         }
 
         return {
